@@ -150,6 +150,19 @@ DASHBOARD_HTML = """
       --yellow-bg: #2b1d00;
       --blue: #58a6ff;
       --accent: #1f6feb;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --space-xs: 4px;
+      --space-sm: 8px;
+      --space-md: 16px;
+      --space-lg: 24px;
+      --space-xl: 32px;
+      --font-xs: 11px;
+      --font-sm: 12px;
+      --font-md: 13px;
+      --font-lg: 15px;
+      --font-xl: 18px;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -157,36 +170,43 @@ DASHBOARD_HTML = """
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
       min-height: 100vh;
+      font-size: var(--font-sm);
+      line-height: 1.5;
     }
 
     /* ── Header ── */
     header {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
-      padding: 16px 24px;
+      padding: var(--space-md) var(--space-lg);
       display: flex;
       align-items: center;
       justify-content: space-between;
       flex-wrap: wrap;
-      gap: 12px;
+      gap: var(--space-md);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(12px);
+      background: rgba(22, 27, 34, 0.85);
     }
 
     .logo {
-      font-size: 18px;
+      font-size: var(--font-xl);
       font-weight: 700;
       color: var(--blue);
       letter-spacing: 1px;
     }
 
-    .logo span { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 10px; }
+    .logo span { color: var(--muted); font-weight: 400; font-size: var(--font-md); margin-left: 10px; }
 
     .status-bar {
       display: flex;
       align-items: center;
-      gap: 16px;
-      font-size: 12px;
+      gap: var(--space-md);
+      font-size: var(--font-sm);
       color: var(--muted);
     }
 
@@ -205,24 +225,24 @@ DASHBOARD_HTML = """
     #countdown { color: var(--blue); font-weight: 600; }
 
     /* ── Layout ── */
-    .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+    .container { max-width: 1440px; margin: 0 auto; padding: var(--space-lg); }
 
     /* ── Symbol Tabs ── */
     .tabs {
       display: flex;
-      gap: 8px;
+      gap: var(--space-sm);
       flex-wrap: wrap;
-      margin-bottom: 24px;
+      margin-bottom: var(--space-lg);
     }
 
     .tab {
-      padding: 8px 18px;
-      border-radius: 6px;
+      padding: var(--space-sm) var(--space-md);
+      border-radius: var(--radius-sm);
       border: 1px solid var(--border);
       background: var(--surface);
       color: var(--muted);
       cursor: pointer;
-      font-size: 13px;
+      font-size: var(--font-md);
       font-weight: 600;
       transition: all 0.15s;
     }
@@ -232,9 +252,9 @@ DASHBOARD_HTML = """
 
     .tab .badge {
       display: inline-block;
-      padding: 1px 6px;
+      padding: 2px 8px;
       border-radius: 10px;
-      font-size: 10px;
+      font-size: var(--font-xs);
       margin-left: 6px;
       font-weight: 700;
     }
@@ -246,38 +266,39 @@ DASHBOARD_HTML = """
     /* ── Main Grid ── */
     .main-grid {
       display: grid;
-      grid-template-columns: 1fr 340px;
-      gap: 20px;
+      grid-template-columns: 1fr 380px;
+      gap: var(--space-lg);
     }
 
+    @media (max-width: 1100px) { .main-grid { grid-template-columns: 1fr 340px; } }
     @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
 
     /* ── Signal Card ── */
     .signal-card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 28px;
+      border-radius: var(--radius-md);
+      padding: var(--space-lg);
       text-align: center;
-      margin-bottom: 20px;
+      margin-bottom: var(--space-lg);
     }
 
     .signal-label {
-      font-size: 11px;
+      font-size: var(--font-xs);
       text-transform: uppercase;
       letter-spacing: 2px;
       color: var(--muted);
-      margin-bottom: 12px;
+      margin-bottom: var(--space-sm);
     }
 
     .signal-badge {
       display: inline-block;
-      font-size: 42px;
+      font-size: 36px;
       font-weight: 900;
-      padding: 16px 48px;
-      border-radius: 12px;
+      padding: 14px 40px;
+      border-radius: var(--radius-lg);
       letter-spacing: 4px;
-      margin: 8px 0;
+      margin: var(--space-sm) 0;
     }
 
     .signal-badge.BUY  { background: var(--green-bg); color: var(--green); border: 2px solid var(--green); }
@@ -285,56 +306,57 @@ DASHBOARD_HTML = """
     .signal-badge.WAIT { background: var(--surface2); color: var(--muted); border: 2px solid var(--border); }
 
     .signal-price {
-      font-size: 26px;
+      font-size: 24px;
       font-weight: 700;
       color: var(--text);
-      margin-top: 12px;
+      margin-top: var(--space-sm);
+      font-family: 'SF Mono', 'Fira Code', monospace;
     }
 
-    .signal-price span { font-size: 13px; color: var(--muted); margin-right: 6px; }
+    .signal-price span { font-size: var(--font-md); color: var(--muted); margin-right: 6px; font-family: inherit; }
 
     .signal-meta {
-      font-size: 12px;
+      font-size: var(--font-sm);
       color: var(--muted);
-      margin-top: 8px;
+      margin-top: var(--space-sm);
     }
 
     .progress-label {
-      font-size: 12px;
+      font-size: var(--font-sm);
       color: var(--muted);
-      margin: 16px 0 6px;
+      margin: var(--space-md) 0 var(--space-sm);
     }
 
     .progress-bar-wrap {
       background: var(--surface2);
-      border-radius: 4px;
-      height: 8px;
+      border-radius: var(--radius-sm);
+      height: 10px;
       overflow: hidden;
     }
 
     .progress-bar-fill {
       height: 100%;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       transition: width 0.5s ease;
     }
 
-    .fill-green  { background: var(--green); }
-    .fill-red    { background: var(--red); }
-    .fill-yellow { background: var(--yellow); }
+    .fill-green  { background: linear-gradient(90deg, #238636, #3fb950); }
+    .fill-red    { background: linear-gradient(90deg, #da3633, #f85149); }
+    .fill-yellow { background: linear-gradient(90deg, #9e6a03, #d29922); }
     .fill-gray   { background: var(--muted); }
 
     /* ── Rules Panel ── */
     .rules-panel {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: var(--radius-md);
       overflow: hidden;
     }
 
     .rules-header {
-      padding: 16px 20px;
+      padding: var(--space-md);
       border-bottom: 1px solid var(--border);
-      font-size: 13px;
+      font-size: var(--font-md);
       font-weight: 600;
       color: var(--muted);
       text-transform: uppercase;
@@ -342,16 +364,19 @@ DASHBOARD_HTML = """
     }
 
     .rule-row {
-      padding: 14px 20px;
+      padding: var(--space-md);
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: flex-start;
-      gap: 14px;
-      transition: background 0.1s;
+      gap: var(--space-md);
+      transition: background 0.15s;
+      border-left: 3px solid transparent;
     }
 
     .rule-row:last-child { border-bottom: none; }
     .rule-row:hover { background: var(--surface2); }
+    .rule-row.rule-passing { border-left-color: var(--green); background: rgba(63, 185, 80, 0.04); }
+    .rule-row.rule-failing { border-left-color: transparent; opacity: 0.6; }
 
     .rule-icon {
       font-size: 20px;
@@ -361,34 +386,34 @@ DASHBOARD_HTML = """
     }
 
     .rule-name {
-      font-size: 13px;
+      font-size: var(--font-md);
       font-weight: 600;
       color: var(--text);
     }
 
     .rule-desc {
-      font-size: 11px;
+      font-size: var(--font-sm);
       color: var(--muted);
       margin-top: 2px;
     }
 
     .rule-value {
-      font-size: 11px;
+      font-size: var(--font-sm);
       color: var(--blue);
-      margin-top: 4px;
-      font-family: monospace;
+      margin-top: var(--space-xs);
+      font-family: 'SF Mono', 'Fira Code', monospace;
     }
 
     .rule-pills {
       display: flex;
-      gap: 6px;
-      margin-top: 5px;
+      gap: var(--space-sm);
+      margin-top: var(--space-sm);
     }
 
     .pill {
-      font-size: 10px;
+      font-size: var(--font-xs);
       font-weight: 700;
-      padding: 2px 8px;
+      padding: 3px 10px;
       border-radius: 10px;
     }
 
@@ -398,70 +423,73 @@ DASHBOARD_HTML = """
     .pill-fail-short { background: var(--surface2); color: var(--muted); }
 
     /* ── Right Column ── */
-    .right-col { display: flex; flex-direction: column; gap: 20px; }
+    .right-col { display: flex; flex-direction: column; gap: var(--space-lg); }
 
     .panel {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: var(--radius-md);
       overflow: hidden;
     }
 
     .panel-header {
-      padding: 14px 18px;
+      padding: var(--space-md);
       border-bottom: 1px solid var(--border);
-      font-size: 12px;
+      font-size: var(--font-sm);
       font-weight: 600;
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 1px;
       display: flex;
       justify-content: space-between;
+      align-items: center;
     }
 
     /* ── Framework Info ── */
     .framework-row {
-      padding: 10px 18px;
+      padding: var(--space-sm) var(--space-md);
       border-bottom: 1px solid var(--border);
-      font-size: 12px;
+      font-size: var(--font-sm);
     }
 
     .framework-row:last-child { border-bottom: none; }
 
-    .fw-label { color: var(--muted); margin-bottom: 2px; }
+    .fw-label { color: var(--muted); margin-bottom: 2px; font-size: var(--font-xs); }
     .fw-value { color: var(--text); font-weight: 500; }
 
     /* ── History ── */
     .history-row {
-      padding: 10px 18px;
+      padding: var(--space-sm) var(--space-md);
       border-bottom: 1px solid var(--border);
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 12px;
+      font-size: var(--font-sm);
+      transition: background 0.1s;
     }
 
     .history-row:last-child { border-bottom: none; }
+    .history-row:hover { background: var(--surface2); }
 
     .hist-sym { font-weight: 600; color: var(--text); }
-    .hist-time { color: var(--muted); font-size: 11px; margin-top: 2px; }
-    .hist-price { color: var(--blue); font-family: monospace; }
+    .hist-time { color: var(--muted); font-size: var(--font-xs); margin-top: 2px; }
+    .hist-price { color: var(--blue); font-family: 'SF Mono', 'Fira Code', monospace; }
 
     .sig-chip {
-      padding: 2px 10px;
+      padding: 3px 10px;
       border-radius: 8px;
       font-weight: 700;
-      font-size: 11px;
+      font-size: var(--font-xs);
     }
 
     .sig-chip.BUY  { background: var(--green-bg); color: var(--green); }
     .sig-chip.SELL { background: var(--red-bg);   color: var(--red); }
 
     .no-signals {
-      padding: 24px 18px;
+      padding: var(--space-lg) var(--space-md);
       text-align: center;
       color: var(--muted);
-      font-size: 12px;
+      font-size: var(--font-sm);
     }
 
     /* ── Loading spinner ── */
@@ -469,14 +497,14 @@ DASHBOARD_HTML = """
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 48px;
+      padding: var(--space-xl) var(--space-lg);
       color: var(--muted);
-      font-size: 14px;
-      gap: 12px;
+      font-size: var(--font-lg);
+      gap: var(--space-md);
     }
 
     .spinner {
-      width: 20px; height: 20px;
+      width: 24px; height: 24px;
       border: 3px solid var(--border);
       border-top-color: var(--blue);
       border-radius: 50%;
@@ -487,16 +515,16 @@ DASHBOARD_HTML = """
 
     /* ── Per-rule strength bar ── */
     .rule-strength-bar {
-      height: 4px;
-      border-radius: 2px;
+      height: 6px;
+      border-radius: 3px;
       background: var(--surface2);
-      margin-top: 6px;
+      margin-top: var(--space-sm);
       overflow: hidden;
     }
 
     .rule-strength-fill {
       height: 100%;
-      border-radius: 2px;
+      border-radius: 3px;
       transition: width 0.4s ease;
     }
 
@@ -510,19 +538,20 @@ DASHBOARD_HTML = """
       background: var(--yellow-bg);
       border: 1px solid var(--yellow);
       color: var(--yellow);
-      padding: 12px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-      font-size: 14px;
+      padding: var(--space-md);
+      border-radius: var(--radius-sm);
+      margin-bottom: var(--space-lg);
+      font-size: var(--font-lg);
       font-weight: 600;
       animation: pulseBanner 2s ease-in-out infinite;
+      text-align: center;
     }
 
     /* ── Refresh Mode Toggle ── */
     .refresh-toggle {
       display: inline-flex;
       gap: 0;
-      border-radius: 6px;
+      border-radius: var(--radius-sm);
       overflow: hidden;
       border: 1px solid var(--border);
     }
@@ -551,15 +580,15 @@ DASHBOARD_HTML = """
     .trade-setup-card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: var(--radius-md);
       overflow: hidden;
-      margin-top: 20px;
+      margin-top: var(--space-lg);
     }
 
     .trade-setup-header {
-      padding: 14px 18px;
+      padding: var(--space-md);
       border-bottom: 1px solid var(--border);
-      font-size: 12px;
+      font-size: var(--font-sm);
       font-weight: 600;
       color: var(--muted);
       text-transform: uppercase;
@@ -570,27 +599,29 @@ DASHBOARD_HTML = """
     }
 
     .trade-setup-row {
-      padding: 8px 18px;
+      padding: 12px var(--space-md);
       border-bottom: 1px solid var(--border);
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 12px;
+      font-size: var(--font-md);
+      transition: background 0.1s;
     }
 
     .trade-setup-row:last-child { border-bottom: none; }
+    .trade-setup-row:hover { background: var(--surface2); }
 
-    .ts-label { color: var(--muted); }
-    .ts-value { color: var(--text); font-weight: 500; font-family: monospace; }
-    .ts-pct-red { color: var(--red); font-size: 11px; margin-left: 4px; }
-    .ts-pct-green { color: var(--green); font-size: 11px; margin-left: 4px; }
+    .ts-label { color: var(--muted); font-size: var(--font-sm); }
+    .ts-value { color: var(--text); font-weight: 600; font-family: 'SF Mono', 'Fira Code', monospace; font-size: var(--font-md); }
+    .ts-pct-red { color: var(--red); font-size: var(--font-sm); margin-left: 6px; }
+    .ts-pct-green { color: var(--green); font-size: var(--font-sm); margin-left: 6px; }
 
     .direction-badge {
       display: inline-block;
-      padding: 4px 14px;
-      border-radius: 6px;
+      padding: var(--space-xs) 14px;
+      border-radius: var(--radius-sm);
       font-weight: 700;
-      font-size: 13px;
+      font-size: var(--font-md);
       letter-spacing: 1px;
     }
 
@@ -600,65 +631,65 @@ DASHBOARD_HTML = """
     .leverage-badge {
       display: inline-block;
       padding: 3px 10px;
-      border-radius: 6px;
+      border-radius: var(--radius-sm);
       font-weight: 700;
-      font-size: 12px;
+      font-size: var(--font-sm);
       background: var(--yellow-bg);
       color: var(--yellow);
       border: 1px solid var(--yellow);
     }
 
-    .rr-value { color: var(--blue); font-size: 11px; margin-left: 6px; }
+    .rr-value { color: var(--blue); font-size: var(--font-sm); margin-left: 8px; }
 
     .trade-setup-muted {
-      padding: 24px 18px;
+      padding: var(--space-lg) var(--space-md);
       text-align: center;
       color: var(--muted);
-      font-size: 12px;
+      font-size: var(--font-sm);
     }
 
     .btn-copy-setup {
       background: var(--accent);
       border: none;
       color: #fff;
-      padding: 6px 14px;
-      border-radius: 6px;
+      padding: var(--space-sm) var(--space-md);
+      border-radius: var(--radius-sm);
       cursor: pointer;
-      font-size: 11px;
+      font-size: var(--font-sm);
       font-weight: 600;
-      transition: opacity 0.15s;
+      transition: all 0.15s;
     }
 
-    .btn-copy-setup:hover { opacity: 0.85; }
+    .btn-copy-setup:hover { opacity: 0.85; transform: translateY(-1px); }
 
     .btn-log-trade {
       background: var(--green);
       border: none;
       color: #fff;
-      padding: 6px 14px;
-      border-radius: 6px;
+      padding: var(--space-sm) var(--space-md);
+      border-radius: var(--radius-sm);
       cursor: pointer;
-      font-size: 11px;
+      font-size: var(--font-sm);
       font-weight: 600;
-      transition: opacity 0.15s;
-      margin-left: 6px;
+      transition: all 0.15s;
+      margin-left: var(--space-sm);
     }
 
-    .btn-log-trade:hover { opacity: 0.85; }
+    .btn-log-trade:hover { opacity: 0.85; transform: translateY(-1px); }
 
     /* ── Trade Journal Section ── */
     .journal-section {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: var(--radius-md);
       overflow: hidden;
-      margin-top: 20px;
+      margin-top: var(--space-lg);
     }
 
     .journal-header {
-      padding: 14px 18px;
+      padding: var(--space-md);
       border-bottom: 1px solid var(--border);
-      font-size: 12px;
+      font-size: var(--font-sm);
       font-weight: 600;
       color: var(--muted);
       text-transform: uppercase;
@@ -669,21 +700,23 @@ DASHBOARD_HTML = """
       display: flex;
       gap: 0;
       border-bottom: 1px solid var(--border);
+      overflow-x: auto;
     }
 
     .journal-tab {
-      padding: 10px 20px;
+      padding: 12px var(--space-lg);
       border: none;
       background: none;
       color: var(--muted);
       cursor: pointer;
-      font-size: 12px;
+      font-size: var(--font-md);
       font-weight: 600;
       border-bottom: 2px solid transparent;
       transition: all 0.15s;
+      white-space: nowrap;
     }
 
-    .journal-tab:hover { color: var(--text); }
+    .journal-tab:hover { color: var(--text); background: var(--surface2); }
 
     .journal-tab.active {
       color: var(--blue);
@@ -701,22 +734,23 @@ DASHBOARD_HTML = """
     .journal-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 12px;
+      font-size: var(--font-md);
     }
 
     .journal-table th {
       text-align: left;
-      padding: 10px 14px;
+      padding: 12px var(--space-md);
       color: var(--muted);
       font-weight: 600;
-      font-size: 11px;
+      font-size: var(--font-xs);
       text-transform: uppercase;
       letter-spacing: 0.5px;
       border-bottom: 1px solid var(--border);
+      background: var(--surface2);
     }
 
     .journal-table td {
-      padding: 10px 14px;
+      padding: 12px var(--space-md);
       border-bottom: 1px solid var(--border);
       color: var(--text);
     }
@@ -788,114 +822,124 @@ DASHBOARD_HTML = """
     .btn-cancel-close:hover { color: var(--text); }
 
     .journal-empty {
-      padding: 24px 18px;
+      padding: var(--space-xl) var(--space-md);
       text-align: center;
       color: var(--muted);
-      font-size: 12px;
+      font-size: var(--font-md);
     }
 
     .stats-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      padding: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: var(--space-md);
+      padding: var(--space-md);
     }
 
     .stat-card {
       background: var(--surface2);
-      border-radius: 8px;
-      padding: 16px;
+      border-radius: var(--radius-sm);
+      padding: var(--space-md);
+      border: 1px solid var(--border);
+      transition: border-color 0.15s;
     }
 
+    .stat-card:hover { border-color: var(--blue); }
+
     .stat-card-label {
-      font-size: 11px;
+      font-size: var(--font-xs);
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      margin-bottom: 6px;
+      margin-bottom: var(--space-sm);
     }
 
     .stat-card-value {
       font-size: 22px;
       font-weight: 700;
       color: var(--text);
-      font-family: monospace;
+      font-family: 'SF Mono', 'Fira Code', monospace;
     }
 
     /* ── Manual Trade Form ── */
     .manual-trade-form {
-      padding: 16px 18px;
+      padding: var(--space-md);
     }
 
     .mtf-row {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 10px;
+      gap: var(--space-md);
+      margin-bottom: var(--space-md);
     }
 
     .mtf-row.full { grid-template-columns: 1fr; }
 
     .mtf-field label {
       display: block;
-      font-size: 11px;
+      font-size: var(--font-xs);
       color: var(--muted);
-      margin-bottom: 4px;
+      margin-bottom: var(--space-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
     }
 
     .mtf-field input,
     .mtf-field select {
       width: 100%;
-      padding: 7px 10px;
-      border-radius: 6px;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
       border: 1px solid var(--border);
       background: var(--surface2);
       color: var(--text);
-      font-size: 12px;
-      font-family: monospace;
+      font-size: var(--font-md);
+      font-family: 'SF Mono', 'Fira Code', monospace;
       outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
     }
 
     .mtf-field input:focus,
-    .mtf-field select:focus { border-color: var(--accent); }
+    .mtf-field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.15); }
 
     .mtf-actions {
       display: flex;
-      gap: 8px;
-      margin-top: 14px;
+      gap: var(--space-sm);
+      margin-top: var(--space-md);
     }
 
     .btn-submit-trade {
       background: var(--green);
       border: none;
       color: #fff;
-      padding: 8px 20px;
-      border-radius: 6px;
+      padding: 10px var(--space-lg);
+      border-radius: var(--radius-sm);
       cursor: pointer;
-      font-size: 12px;
+      font-size: var(--font-md);
       font-weight: 600;
+      transition: all 0.15s;
     }
 
-    .btn-submit-trade:hover { opacity: 0.85; }
+    .btn-submit-trade:hover { opacity: 0.85; transform: translateY(-1px); }
 
     .btn-prefill-trade {
       background: var(--accent);
       border: none;
       color: #fff;
-      padding: 8px 14px;
-      border-radius: 6px;
+      padding: 10px var(--space-md);
+      border-radius: var(--radius-sm);
       cursor: pointer;
-      font-size: 12px;
+      font-size: var(--font-md);
       font-weight: 600;
+      transition: all 0.15s;
     }
 
-    .btn-prefill-trade:hover { opacity: 0.85; }
+    .btn-prefill-trade:hover { opacity: 0.85; transform: translateY(-1px); }
 
     .mtf-msg {
-      font-size: 11px;
-      margin-top: 8px;
-      padding: 6px 10px;
-      border-radius: 4px;
+      font-size: var(--font-sm);
+      margin-top: var(--space-sm);
+      padding: var(--space-sm) var(--space-md);
+      border-radius: var(--radius-sm);
     }
 
     .mtf-msg.success { background: var(--green-bg); color: var(--green); }
@@ -903,40 +947,43 @@ DASHBOARD_HTML = """
 
     /* ── Settings Panel ── */
     .settings-row {
-      padding: 10px 18px;
+      padding: var(--space-sm) var(--space-md);
       border-bottom: 1px solid var(--border);
-      font-size: 12px;
+      font-size: var(--font-sm);
     }
 
     .settings-row:last-child { border-bottom: none; }
 
     .settings-label {
       color: var(--muted);
-      margin-bottom: 4px;
-      font-size: 11px;
+      margin-bottom: var(--space-xs);
+      font-size: var(--font-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
     }
 
     .settings-input {
       width: 100%;
-      padding: 6px 10px;
-      border-radius: 6px;
+      padding: var(--space-sm) var(--space-sm);
+      border-radius: var(--radius-sm);
       border: 1px solid var(--border);
       background: var(--surface2);
       color: var(--text);
-      font-size: 13px;
-      font-family: monospace;
+      font-size: var(--font-md);
+      font-family: 'SF Mono', 'Fira Code', monospace;
       outline: none;
-      transition: border-color 0.15s;
+      transition: border-color 0.15s, box-shadow 0.15s;
     }
 
-    .settings-input:focus { border-color: var(--accent); }
+    .settings-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.15); }
 
     .settings-saved {
-      font-size: 10px;
+      font-size: var(--font-xs);
       color: var(--green);
       opacity: 0;
       transition: opacity 0.2s;
-      margin-left: 8px;
+      margin-left: var(--space-sm);
     }
 
     .settings-saved.show { opacity: 1; }
@@ -946,9 +993,9 @@ DASHBOARD_HTML = """
       width: 100%;
       background: none;
       border: none;
-      padding: 14px 18px;
+      padding: var(--space-md);
       border-bottom: 1px solid var(--border);
-      font-size: 12px;
+      font-size: var(--font-sm);
       font-weight: 600;
       color: var(--muted);
       text-transform: uppercase;
@@ -958,13 +1005,14 @@ DASHBOARD_HTML = """
       justify-content: space-between;
       align-items: center;
       text-align: left;
+      transition: color 0.15s, background 0.15s;
     }
 
-    .guide-toggle:hover { color: var(--text); }
+    .guide-toggle:hover { color: var(--text); background: var(--surface2); }
 
     .guide-arrow {
-      transition: transform 0.2s;
-      font-size: 10px;
+      transition: transform 0.3s;
+      font-size: var(--font-xs);
     }
 
     .guide-arrow.open { transform: rotate(180deg); }
@@ -972,42 +1020,42 @@ DASHBOARD_HTML = """
     .guide-content {
       max-height: 0;
       overflow: hidden;
-      transition: max-height 0.3s ease;
+      transition: max-height 0.4s ease;
     }
 
     .guide-content.open {
-      max-height: 2000px;
+      max-height: 3000px;
     }
 
     .guide-section {
-      padding: 10px 18px;
+      padding: var(--space-md);
       border-bottom: 1px solid var(--border);
     }
 
     .guide-section:last-child { border-bottom: none; }
 
     .guide-section-title {
-      font-size: 12px;
+      font-size: var(--font-md);
       font-weight: 700;
       color: var(--text);
-      margin-bottom: 6px;
+      margin-bottom: var(--space-sm);
     }
 
     .guide-section p,
     .guide-section li {
-      font-size: 11px;
+      font-size: var(--font-sm);
       color: var(--muted);
-      line-height: 1.5;
-      margin-bottom: 4px;
+      line-height: 1.6;
+      margin-bottom: var(--space-xs);
     }
 
     .guide-section ul,
     .guide-section ol {
-      padding-left: 16px;
-      margin: 4px 0;
+      padding-left: var(--space-md);
+      margin: var(--space-xs) 0;
     }
 
-    .guide-section ol li { margin-bottom: 3px; }
+    .guide-section ol li { margin-bottom: var(--space-xs); }
 
     .conf-dot {
       display: inline-block;
@@ -1023,24 +1071,46 @@ DASHBOARD_HTML = """
     /* ── Chart Timeframe Selector ── */
     .chart-tf-bar {
       display: flex;
-      gap: 4px;
-      margin-bottom: 8px;
+      gap: var(--space-xs);
+      margin-bottom: var(--space-sm);
     }
 
     .chart-tf-btn {
-      padding: 4px 12px;
-      border-radius: 4px;
+      padding: var(--space-sm) var(--space-md);
+      border-radius: var(--radius-sm);
       border: 1px solid var(--border);
       background: var(--surface);
       color: var(--muted);
       cursor: pointer;
-      font-size: 11px;
+      font-size: var(--font-sm);
       font-weight: 600;
       transition: all 0.15s;
     }
 
     .chart-tf-btn:hover { border-color: var(--blue); color: var(--text); }
     .chart-tf-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    /* ── Responsive: Mobile ── */
+    @media (max-width: 600px) {
+      .container { padding: var(--space-md); }
+      header { padding: var(--space-sm) var(--space-md); }
+      .logo span { display: none; }
+      .status-bar { font-size: var(--font-xs); gap: var(--space-sm); flex-wrap: wrap; }
+      .signal-badge { font-size: 28px; padding: 12px 28px; }
+      .signal-price { font-size: 20px; }
+      .tabs { gap: var(--space-xs); }
+      .tab { padding: var(--space-sm) 12px; font-size: var(--font-sm); }
+      .mtf-row { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      .trade-setup-row { font-size: var(--font-sm); }
+      .journal-tab { padding: 10px 14px; font-size: var(--font-sm); }
+      .right-col { gap: var(--space-md); }
+    }
+
+    @media (max-width: 400px) {
+      .refresh-toggle { display: none; }
+      .signal-badge { font-size: 24px; padding: 10px 20px; }
+    }
   </style>
   <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
@@ -1293,8 +1363,9 @@ function buildDashboardHTML(data) {
     const strength = r.strength != null ? r.strength : 0;
     const strengthPct = Math.round(strength * 100);
     const strengthColor = strength > 0.7 ? 'var(--green)' : strength > 0.4 ? 'var(--yellow)' : 'var(--muted)';
+    const ruleStateClass = (r.long || r.short) ? 'rule-passing' : 'rule-failing';
     return `
-      <div class="rule-row">
+      <div class="rule-row ${ruleStateClass}" id="rule-${i}-row">
         <div class="rule-icon" id="rule-${i}-icon">${icon}</div>
         <div style="flex:1">
           <div class="rule-name" id="rule-${i}-name">${r.rule}</div>
@@ -1343,7 +1414,7 @@ function buildDashboardHTML(data) {
         </div>
 
         <!-- Chart Container -->
-        <div id="chart-container" style="height:350px;border-radius:10px;overflow:hidden;margin-bottom:20px;border:1px solid var(--border)"></div>
+        <div id="chart-container" style="height:380px;border-radius:var(--radius-md);overflow:hidden;margin-bottom:var(--space-lg);border:1px solid var(--border)"></div>
 
         <!-- Signal Card -->
         <div class="signal-card">
@@ -1496,6 +1567,27 @@ function buildDashboardHTML(data) {
                 <li>If a signal has weak confidence, consider reducing position size by 50% or skipping entirely.</li>
               </ul>
             </div>
+            <div class="guide-section">
+              <div class="guide-section-title">Fast Entry on ByBit</div>
+              <p><strong>Fastest method (Market Order):</strong></p>
+              <ol>
+                <li>Open ByBit Futures — select the pair (e.g. BTC/USDT Perpetual).</li>
+                <li>Set your leverage from the trade setup card.</li>
+                <li>Choose <strong>Market Order</strong> — enter position size — tap <strong>Buy/Long</strong> or <strong>Sell/Short</strong>. Fills instantly.</li>
+                <li>Go to <strong>Positions</strong> tab at the bottom.</li>
+                <li>Tap <strong>TP/SL</strong> next to your position.</li>
+                <li>Enter Stop Loss and TP1/TP2/TP3 from the setup card.</li>
+              </ol>
+              <p style="margin-top:6px"><strong>One-click entry (Limit Order with preset TP/SL):</strong></p>
+              <ol>
+                <li>Switch to <strong>Limit Order</strong> on the order form.</li>
+                <li>Set your entry price.</li>
+                <li>Check the <strong>TP/SL</strong> checkbox on the order form.</li>
+                <li>Fill in SL and TP values before submitting.</li>
+                <li>Submit — everything goes in as one order.</li>
+              </ol>
+              <p style="margin-top:6px;color:var(--yellow)"><strong>Tip:</strong> You can enter a Market Order first for speed, then immediately set TP/SL after — it takes 3 taps. Never walk away without a stop loss.</p>
+            </div>
           </div>
         </div>
 
@@ -1642,6 +1734,12 @@ function updateDashboardValues(data) {
   // Update rules
   if (data.rules) {
     data.rules.forEach((r, i) => {
+      const rowEl = document.getElementById("rule-" + i + "-row");
+      if (rowEl) {
+        rowEl.classList.toggle("rule-passing", r.long || r.short);
+        rowEl.classList.toggle("rule-failing", !r.long && !r.short);
+      }
+
       const iconEl = document.getElementById("rule-" + i + "-icon");
       if (iconEl) iconEl.textContent = getRuleIcon(r);
 
@@ -1722,7 +1820,7 @@ async function loadChart(symbol) {
     timeScale: { timeVisible: true, secondsVisible: false },
     crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
     width: container.clientWidth,
-    height: 350,
+    height: 380,
   });
 
   candleSeries = chartInstance.addCandlestickSeries({
