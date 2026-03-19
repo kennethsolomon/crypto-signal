@@ -17,9 +17,9 @@
 | 10 | Implement (`/sk:execute-plan`) | done | All 3 waves complete: analyzer.py (rules 3,5,6 + funding + analyze), app.py (frontend) |
 | 11 | Commit (`/sk:smart-commit`) | done | a51b08b |
 | 12 | **Lint + Dep Audit** (`/sk:lint`) | done | ruff format: 3 reformatted; ruff check: 2 fixes (F841, F401); pip-audit: clean |
-| 13 | Commit (`/sk:smart-commit`) | not yet | >> next << |
-| 14 | **Verify Tests** (`/sk:test`) | not yet | HARD GATE — 100% coverage |
-| 15 | Commit (`/sk:smart-commit`) | not yet | conditional |
+| 13 | Commit (`/sk:smart-commit`) | done | e6e4921 |
+| 14 | **Verify Tests** (`/sk:test`) | done | 62 tests pass; 100% new code coverage; 8 tests added for edge cases |
+| 15 | Commit (`/sk:smart-commit`) | not yet | >> next << |
 | 16 | **Security** (`/sk:security-check`) | not yet | HARD GATE — 0 issues |
 | 17 | Commit (`/sk:smart-commit`) | not yet | conditional |
 | 18 | Performance (`/sk:perf`) | not yet | optional gate |

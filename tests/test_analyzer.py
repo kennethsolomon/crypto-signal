@@ -59,7 +59,7 @@ BLOCK_LONG = {"rate": 0.0006, "extreme": True, "blocked_side": "LONG"}
 BLOCK_SHORT = {"rate": -0.0006, "extreme": True, "blocked_side": "SHORT"}
 
 
-def patch_analyze(long_flags, short_flags, funding=None, price_df=None):
+def patch_analyze(long_flags, short_flags, funding=None, price_df=None, strength=0.5):
     """Return a list of patches that control all 6 rules + funding + price."""
     if funding is None:
         funding = NEUTRAL_FUNDING
@@ -75,7 +75,7 @@ def patch_analyze(long_flags, short_flags, funding=None, price_df=None):
         "check_rule_6_stoch_rsi",
     ]
     patches = [
-        patch(f"analyzer.{fn}", return_value=make_rule(long_flags[i], short_flags[i]))
+        patch(f"analyzer.{fn}", return_value=make_rule(long_flags[i], short_flags[i], strength))
         for i, fn in enumerate(rule_fns)
     ]
     patches.append(patch("analyzer.fetch_funding_rate", return_value=funding))
@@ -241,6 +241,17 @@ class TestRule5OBVTrend:
         ):
             assert f in result
 
+    def test_no_signal_when_closes_flat_obv_zero_slope(self):
+        # All closes equal → every OBV step hits the flat branch → slope = 0 → no signal
+        closes = [100.0] * 60
+        with patch(
+            "analyzer.fetch_ohlcv",
+            return_value=make_ohlcv(60, close_prices=closes),
+        ):
+            result = analyzer.check_rule_5_volume("BTC/USDT")
+        assert result["long"] is False
+        assert result["short"] is False
+
 
 # ─── Rule 6: Stochastic RSI ───────────────────────────────────────────────────
 
@@ -355,6 +366,40 @@ class TestRule6StochRSI:
         assert any("1h" in str(c) for c in mock_fetch.call_args_list), (
             "check_rule_6_stoch_rsi must fetch '1h' candles"
         )
+
+    def test_stoch_none_returns_error(self):
+        with patch("analyzer.fetch_ohlcv", return_value=make_ohlcv(60)):
+            with patch("analyzer.ta") as mock_ta:
+                mock_ta.stochrsi.return_value = None
+                result = analyzer.check_rule_6_stoch_rsi("BTC/USDT")
+        assert result["error"] is True
+        assert result["long"] is False
+        assert result["short"] is False
+
+    def test_stoch_missing_expected_columns_returns_error(self):
+        with patch("analyzer.fetch_ohlcv", return_value=make_ohlcv(60)):
+            with patch("analyzer.ta") as mock_ta:
+                mock_ta.stochrsi.return_value = pd.DataFrame({"wrong_col": [1.0] * 60})
+                result = analyzer.check_rule_6_stoch_rsi("BTC/USDT")
+        assert result["error"] is True
+        assert result["long"] is False
+
+    def test_stoch_only_one_valid_row_after_dropna_returns_error(self):
+        # After dropna, only 1 row remains — need at least 2 for crossover check
+        k_col = "STOCHRSIk_14_14_3_3"
+        d_col = "STOCHRSId_14_14_3_3"
+        data = pd.DataFrame(
+            {
+                k_col: [float("nan")] * 59 + [30.0],
+                d_col: [float("nan")] * 59 + [30.0],
+            }
+        )
+        with patch("analyzer.fetch_ohlcv", return_value=make_ohlcv(60)):
+            with patch("analyzer.ta") as mock_ta:
+                mock_ta.stochrsi.return_value = data
+                result = analyzer.check_rule_6_stoch_rsi("BTC/USDT")
+        assert result["error"] is True
+        assert result["long"] is False
 
 
 # ─── fetch_funding_rate ────────────────────────────────────────────────────────
@@ -540,3 +585,50 @@ class TestAnalyzeSixRules:
         result = self.run([True] * 6, [False] * 6, funding=NEUTRAL_FUNDING)
         assert result["signal"] == "BUY"
         assert not result["funding_blocked"]
+
+    def test_wait_on_tie_when_both_long_and_short_reach_threshold(self):
+        # Both long and short hit 5/6 simultaneously — conflict → WAIT
+        result = self.run([True] * 5 + [False], [True] * 5 + [False])
+        assert result["signal"] == "WAIT"
+        assert result["long_rules_met"] == 5
+        assert result["short_rules_met"] == 5
+
+    def test_confidence_label_strong_when_score_gte_85(self):
+        # All 6 pass with strength=1.0 → confidence = 100% → "Strong"
+        with ExitStack() as stack:
+            for p in patch_analyze([True] * 6, [False] * 6, strength=1.0):
+                stack.enter_context(p)
+            result = analyzer.analyze("BTC/USDT")
+        assert result["confidence_label"] == "Strong"
+
+    def test_confidence_label_medium_when_score_between_70_and_85(self):
+        # All 6 pass with strength=0.75 → confidence = 75% → "Medium"
+        with ExitStack() as stack:
+            for p in patch_analyze([True] * 6, [False] * 6, strength=0.75):
+                stack.enter_context(p)
+            result = analyzer.analyze("BTC/USDT")
+        assert result["confidence_label"] == "Medium"
+
+    def test_current_price_none_when_fetch_raises(self):
+        # fetch_ohlcv raises for the price call → current_price should be None, not crash
+        rule_fns = [
+            "check_rule_1_trend",
+            "check_rule_2_rsi",
+            "check_rule_3_macd",
+            "check_rule_4_ema_stack",
+            "check_rule_5_volume",
+            "check_rule_6_stoch_rsi",
+        ]
+        with ExitStack() as stack:
+            for fn in rule_fns:
+                stack.enter_context(
+                    patch(f"analyzer.{fn}", return_value=make_rule(False, False))
+                )
+            stack.enter_context(
+                patch("analyzer.fetch_funding_rate", return_value=NEUTRAL_FUNDING)
+            )
+            stack.enter_context(
+                patch("analyzer.fetch_ohlcv", side_effect=Exception("network error"))
+            )
+            result = analyzer.analyze("BTC/USDT")
+        assert result["current_price"] is None
