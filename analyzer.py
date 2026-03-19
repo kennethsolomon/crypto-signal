@@ -17,20 +17,20 @@ SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "DOGE/USD
 
 # ─── Rule Configuration ────────────────────────────────────────────────────────
 CONFIG = {
-    "trend_ema_period": 200,       # 4H EMA period for trend direction
-    "rsi_period": 14,              # RSI period
-    "rsi_long_min": 50,            # RSI min for long signal
-    "rsi_long_max": 70,            # RSI max for long (not overbought)
-    "rsi_short_min": 30,           # RSI min for short (not oversold)
-    "rsi_short_max": 50,           # RSI max for short signal
+    "trend_ema_period": 200,  # 4H EMA period for trend direction
+    "rsi_period": 14,  # RSI period
+    "rsi_long_min": 50,  # RSI min for long signal
+    "rsi_long_max": 70,  # RSI max for long (not overbought)
+    "rsi_short_min": 30,  # RSI min for short (not oversold)
+    "rsi_short_max": 50,  # RSI max for short signal
     "macd_fast": 12,
     "macd_slow": 26,
     "macd_signal": 9,
-    "macd_lookback": 3,            # How many candles back to look for crossover
-    "ema_fast": 9,                 # 15M fast EMA
-    "ema_slow": 21,                # 15M slow EMA
-    "volume_multiplier": 1.2,      # Volume must be this x the average
-    "volume_avg_period": 20,       # Period for average volume
+    "macd_lookback": 3,  # How many candles back to look for crossover
+    "ema_fast": 9,  # 15M fast EMA
+    "ema_slow": 21,  # 15M slow EMA
+    "volume_multiplier": 1.2,  # Volume must be this x the average
+    "volume_avg_period": 20,  # Period for average volume
 }
 
 
@@ -46,7 +46,9 @@ def fetch_funding_rate(symbol: str) -> dict:
     """
     try:
         # ByBit funding rate requires the perpetual contract symbol format (e.g. BTC/USDT:USDT)
-        perp_symbol = symbol.replace("/USDT", "/USDT:USDT") if ":USDT" not in symbol else symbol
+        perp_symbol = (
+            symbol.replace("/USDT", "/USDT:USDT") if ":USDT" not in symbol else symbol
+        )
         data = exchange.fetch_funding_rate(perp_symbol)
         rate = float(data["fundingRate"])
         if rate >= FUNDING_EXTREME_THRESHOLD:
@@ -63,7 +65,9 @@ def fetch_ohlcv(symbol: str, timeframe: str, limit: int = 250) -> pd.DataFrame |
     """Fetch OHLCV candles from ByBit. Returns None on failure."""
     try:
         raw = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
-        df = pd.DataFrame(raw, columns=["timestamp", "open", "high", "low", "close", "volume"])
+        df = pd.DataFrame(
+            raw, columns=["timestamp", "open", "high", "low", "close", "volume"]
+        )
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         return df
     except Exception as e:
@@ -80,8 +84,13 @@ def check_rule_1_trend(symbol: str) -> dict:
     """
     df = fetch_ohlcv(symbol, "4h", 250)
     if df is None or len(df) < 200:
-        return {"rule": "Trend Alignment (4H EMA 200)", "long": False, "short": False,
-                "value": "Data unavailable", "error": True}
+        return {
+            "rule": "Trend Alignment (4H EMA 200)",
+            "long": False,
+            "short": False,
+            "value": "Data unavailable",
+            "error": True,
+        }
 
     ema200 = ta.ema(df["close"], length=CONFIG["trend_ema_period"])
     price = df["close"].iloc[-1]
@@ -114,15 +123,24 @@ def check_rule_2_rsi(symbol: str) -> dict:
     """
     df = fetch_ohlcv(symbol, "1h", 100)
     if df is None or len(df) < 20:
-        return {"rule": "RSI Momentum (1H RSI 14)", "long": False, "short": False,
-                "value": "Data unavailable", "error": True}
+        return {
+            "rule": "RSI Momentum (1H RSI 14)",
+            "long": False,
+            "short": False,
+            "value": "Data unavailable",
+            "error": True,
+        }
 
     df["rsi"] = ta.rsi(df["close"], length=CONFIG["rsi_period"])
     rsi = df["rsi"].iloc[-1]
     rsi_prev = df["rsi"].iloc[-2]
 
-    long_pass = (CONFIG["rsi_long_min"] < rsi < CONFIG["rsi_long_max"]) and (rsi > rsi_prev)
-    short_pass = (CONFIG["rsi_short_min"] < rsi < CONFIG["rsi_short_max"]) and (rsi < rsi_prev)
+    long_pass = (CONFIG["rsi_long_min"] < rsi < CONFIG["rsi_long_max"]) and (
+        rsi > rsi_prev
+    )
+    short_pass = (CONFIG["rsi_short_min"] < rsi < CONFIG["rsi_short_max"]) and (
+        rsi < rsi_prev
+    )
 
     direction = "↑ Rising" if rsi > rsi_prev else "↓ Falling"
 
@@ -159,16 +177,26 @@ def check_rule_3_macd(symbol: str) -> dict:
     """
     df = fetch_ohlcv(symbol, "1h", 100)
     if df is None or len(df) < 30:
-        return {"rule": "MACD Histogram (1H)", "long": False, "short": False,
-                "value": "Data unavailable", "description": "Momentum building in signal direction",
-                "signal_hint": "LONG: histogram positive & growing | SHORT: histogram negative & falling",
-                "strength": 0.0, "error": True}
+        return {
+            "rule": "MACD Histogram (1H)",
+            "long": False,
+            "short": False,
+            "value": "Data unavailable",
+            "description": "Momentum building in signal direction",
+            "signal_hint": "LONG: histogram positive & growing | SHORT: histogram negative & falling",
+            "strength": 0.0,
+            "error": True,
+        }
 
-    macd_data = ta.macd(df["close"],
-                        fast=CONFIG["macd_fast"],
-                        slow=CONFIG["macd_slow"],
-                        signal=CONFIG["macd_signal"])
-    hist_col = f"MACDh_{CONFIG['macd_fast']}_{CONFIG['macd_slow']}_{CONFIG['macd_signal']}"
+    macd_data = ta.macd(
+        df["close"],
+        fast=CONFIG["macd_fast"],
+        slow=CONFIG["macd_slow"],
+        signal=CONFIG["macd_signal"],
+    )
+    hist_col = (
+        f"MACDh_{CONFIG['macd_fast']}_{CONFIG['macd_slow']}_{CONFIG['macd_signal']}"
+    )
     df["histogram"] = macd_data[hist_col]
 
     h1 = float(df["histogram"].iloc[-1])
@@ -176,7 +204,7 @@ def check_rule_3_macd(symbol: str) -> dict:
     h3 = float(df["histogram"].iloc[-3])
 
     # All 3 must be positive AND growing — momentum already established, not just crossing zero
-    long_pass  = h1 > 0 and h2 > 0 and h3 > 0 and h1 > h2 > h3
+    long_pass = h1 > 0 and h2 > 0 and h3 > 0 and h1 > h2 > h3
     # All 3 must be negative AND falling (more negative) — selling pressure building
     short_pass = h1 < 0 and h2 < 0 and h3 < 0 and h1 < h2 < h3
 
@@ -209,8 +237,13 @@ def check_rule_4_ema_stack(symbol: str) -> dict:
     """
     df = fetch_ohlcv(symbol, "15m", 60)
     if df is None or len(df) < 25:
-        return {"rule": "EMA Stack (15M 9/21)", "long": False, "short": False,
-                "value": "Data unavailable", "error": True}
+        return {
+            "rule": "EMA Stack (15M 9/21)",
+            "long": False,
+            "short": False,
+            "value": "Data unavailable",
+            "error": True,
+        }
 
     df["ema9"] = ta.ema(df["close"], length=CONFIG["ema_fast"])
     df["ema21"] = ta.ema(df["close"], length=CONFIG["ema_slow"])
@@ -250,10 +283,16 @@ def check_rule_5_volume(symbol: str) -> dict:
     """
     df = fetch_ohlcv(symbol, "15m", 60)
     if df is None or len(df) < 10:
-        return {"rule": "OBV Trend (15M)", "long": False, "short": False,
-                "value": "Data unavailable", "description": "Net buying/selling pressure over 5 candles",
-                "signal_hint": "LONG: OBV rising (net buyers) | SHORT: OBV falling (net sellers)",
-                "strength": 0.0, "error": True}
+        return {
+            "rule": "OBV Trend (15M)",
+            "long": False,
+            "short": False,
+            "value": "Data unavailable",
+            "description": "Net buying/selling pressure over 5 candles",
+            "signal_hint": "LONG: OBV rising (net buyers) | SHORT: OBV falling (net sellers)",
+            "strength": 0.0,
+            "error": True,
+        }
 
     # Compute OBV manually
     obv = [0.0]
@@ -271,7 +310,11 @@ def check_rule_5_volume(symbol: str) -> dict:
     long_pass = slope > 0
     short_pass = slope < 0
 
-    avg_vol = float(df["volume"].iloc[-20:].mean()) if len(df) >= 20 else float(df["volume"].mean())
+    avg_vol = (
+        float(df["volume"].iloc[-20:].mean())
+        if len(df) >= 20
+        else float(df["volume"].mean())
+    )
     strength = min(abs(slope) / avg_vol, 1.0) if avg_vol > 0 else 0.0
 
     direction = "↑ Rising" if slope > 0 else ("↓ Falling" if slope < 0 else "→ Flat")
@@ -298,44 +341,68 @@ def check_rule_6_stoch_rsi(symbol: str) -> dict:
     """
     df = fetch_ohlcv(symbol, "1h", 60)
     if df is None or len(df) < 20:
-        return {"rule": "Stochastic RSI (1H)", "long": False, "short": False,
-                "value": "Data unavailable", "description": "Entry timing — buy dips, not tops",
-                "signal_hint": "LONG: K<50 crossing up | SHORT: K>50 crossing down",
-                "strength": 0.0, "error": True}
+        return {
+            "rule": "Stochastic RSI (1H)",
+            "long": False,
+            "short": False,
+            "value": "Data unavailable",
+            "description": "Entry timing — buy dips, not tops",
+            "signal_hint": "LONG: K<50 crossing up | SHORT: K>50 crossing down",
+            "strength": 0.0,
+            "error": True,
+        }
 
     stoch = ta.stochrsi(df["close"], length=14, rsi_length=14, k=3, d=3)
     if stoch is None or stoch.empty:
-        return {"rule": "Stochastic RSI (1H)", "long": False, "short": False,
-                "value": "Indicator unavailable", "description": "Entry timing — buy dips, not tops",
-                "signal_hint": "LONG: K<50 crossing up | SHORT: K>50 crossing down",
-                "strength": 0.0, "error": True}
+        return {
+            "rule": "Stochastic RSI (1H)",
+            "long": False,
+            "short": False,
+            "value": "Indicator unavailable",
+            "description": "Entry timing — buy dips, not tops",
+            "signal_hint": "LONG: K<50 crossing up | SHORT: K>50 crossing down",
+            "strength": 0.0,
+            "error": True,
+        }
 
     k_col = "STOCHRSIk_14_14_3_3"
     d_col = "STOCHRSId_14_14_3_3"
 
     if k_col not in stoch.columns or d_col not in stoch.columns:
-        return {"rule": "Stochastic RSI (1H)", "long": False, "short": False,
-                "value": "Column unavailable", "description": "Entry timing — buy dips, not tops",
-                "signal_hint": "LONG: K<50 crossing up | SHORT: K>50 crossing down",
-                "strength": 0.0, "error": True}
+        return {
+            "rule": "Stochastic RSI (1H)",
+            "long": False,
+            "short": False,
+            "value": "Column unavailable",
+            "description": "Entry timing — buy dips, not tops",
+            "signal_hint": "LONG: K<50 crossing up | SHORT: K>50 crossing down",
+            "strength": 0.0,
+            "error": True,
+        }
 
     stoch = stoch.dropna()
     if len(stoch) < 2:
-        return {"rule": "Stochastic RSI (1H)", "long": False, "short": False,
-                "value": "Insufficient data", "description": "Entry timing — buy dips, not tops",
-                "signal_hint": "LONG: K<50 crossing up | SHORT: K>50 crossing down",
-                "strength": 0.0, "error": True}
+        return {
+            "rule": "Stochastic RSI (1H)",
+            "long": False,
+            "short": False,
+            "value": "Insufficient data",
+            "description": "Entry timing — buy dips, not tops",
+            "signal_hint": "LONG: K<50 crossing up | SHORT: K>50 crossing down",
+            "strength": 0.0,
+            "error": True,
+        }
 
-    k_cur  = float(stoch[k_col].iloc[-1])
-    d_cur  = float(stoch[d_col].iloc[-1])
+    k_cur = float(stoch[k_col].iloc[-1])
+    d_cur = float(stoch[d_col].iloc[-1])
     k_prev = float(stoch[k_col].iloc[-2])
     d_prev = float(stoch[d_col].iloc[-2])
 
     # Crossover: K crosses up = K was <= D before, now K > D
-    crosses_up   = k_cur > d_cur and k_prev <= d_prev
+    crosses_up = k_cur > d_cur and k_prev <= d_prev
     crosses_down = k_cur < d_cur and k_prev >= d_prev
 
-    long_pass  = k_cur < 50 and crosses_up
+    long_pass = k_cur < 50 and crosses_up
     short_pass = k_cur > 50 and crosses_down
 
     if long_pass:
@@ -357,8 +424,12 @@ def check_rule_6_stoch_rsi(symbol: str) -> dict:
     }
 
 
-def calculate_trade_setup(analysis: dict, account_balance: float = 1000.0,
-                          risk_pct: float = 0.02, max_leverage: int = 5) -> dict | None:
+def calculate_trade_setup(
+    analysis: dict,
+    account_balance: float = 1000.0,
+    risk_pct: float = 0.02,
+    max_leverage: int = 5,
+) -> dict | None:
     """Calculate trade setup with entry, SL, TP levels, position sizing, and leverage."""
     if analysis["signal"] not in ("BUY", "SELL"):
         return None
@@ -440,7 +511,9 @@ def calculate_trade_setup(analysis: dict, account_balance: float = 1000.0,
     }
 
 
-def get_chart_data(symbol: str, timeframe: str = "15m", limit: int = 100) -> dict | None:
+def get_chart_data(
+    symbol: str, timeframe: str = "15m", limit: int = 100
+) -> dict | None:
     """Return OHLCV + EMA9/EMA21 for charting."""
     df = fetch_ohlcv(symbol, timeframe, limit)
     if df is None or len(df) < 25:
@@ -454,13 +527,15 @@ def get_chart_data(symbol: str, timeframe: str = "15m", limit: int = 100) -> dic
     ema21_data = []
     for _, row in df.iterrows():
         t = int(row["timestamp"].timestamp())
-        candles.append({
-            "time": t,
-            "open": float(row["open"]),
-            "high": float(row["high"]),
-            "low": float(row["low"]),
-            "close": float(row["close"]),
-        })
+        candles.append(
+            {
+                "time": t,
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"]),
+            }
+        )
         if pd.notna(row["ema9"]):
             ema9_data.append({"time": t, "value": float(row["ema9"])})
         if pd.notna(row["ema21"]):
@@ -537,12 +612,24 @@ def analyze(symbol: str) -> dict:
         signal_blocked_reason = "Extreme negative funding — short squeeze risk"
 
     # Weighted confidence score
-    long_confidence = sum(
-        r["strength"] * w for r, w, passes in zip(rules, RULE_WEIGHTS, rules_long) if passes
-    ) / total_weight * 100
-    short_confidence = sum(
-        r["strength"] * w for r, w, passes in zip(rules, RULE_WEIGHTS, rules_short) if passes
-    ) / total_weight * 100
+    long_confidence = (
+        sum(
+            r["strength"] * w
+            for r, w, passes in zip(rules, RULE_WEIGHTS, rules_long)
+            if passes
+        )
+        / total_weight
+        * 100
+    )
+    short_confidence = (
+        sum(
+            r["strength"] * w
+            for r, w, passes in zip(rules, RULE_WEIGHTS, rules_short)
+            if passes
+        )
+        / total_weight
+        * 100
+    )
 
     if signal == "BUY":
         confidence_score = round(long_confidence, 1)
@@ -575,7 +662,9 @@ def analyze(symbol: str) -> dict:
     # Get current price
     try:
         price_df = fetch_ohlcv(symbol, "1m", 2)
-        current_price = float(price_df["close"].iloc[-1]) if price_df is not None else None
+        current_price = (
+            float(price_df["close"].iloc[-1]) if price_df is not None else None
+        )
     except Exception:
         current_price = None
 

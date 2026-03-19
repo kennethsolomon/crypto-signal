@@ -112,13 +112,16 @@ def get_cached_analysis(symbol: str) -> dict:
 
         # Log to history if it's a real signal
         if data["signal"] in ("BUY", "SELL"):
-            signal_history.insert(0, {
-                "symbol": data["symbol"],
-                "signal": data["signal"],
-                "price": data["current_price"],
-                "timestamp": data["timestamp_display"],
-                "confidence": data.get("confidence_score", 0),
-            })
+            signal_history.insert(
+                0,
+                {
+                    "symbol": data["symbol"],
+                    "signal": data["signal"],
+                    "price": data["current_price"],
+                    "timestamp": data["timestamp_display"],
+                    "confidence": data.get("confidence_score", 0),
+                },
+            )
             # Keep only last 50 signals
             del signal_history[50:]
             save_signals(signal_history)
@@ -2652,22 +2655,23 @@ def api_trade_stats():
     closed = [t for t in trades if t.get("status") == "closed"]
 
     if not closed:
-        return jsonify({
-            "total_trades": len(trades),
-            "open_trades": len([t for t in trades if t.get("status") == "open"]),
-            "closed_trades": 0,
-            "win_rate": 0,
-            "avg_rr": 0,
-            "total_pnl_usdt": 0,
-            "total_pnl_pct": 0,
-            "best_trade_pnl": 0,
-            "worst_trade_pnl": 0,
-            "win_streak": 0,
-            "loss_streak": 0,
-        })
+        return jsonify(
+            {
+                "total_trades": len(trades),
+                "open_trades": len([t for t in trades if t.get("status") == "open"]),
+                "closed_trades": 0,
+                "win_rate": 0,
+                "avg_rr": 0,
+                "total_pnl_usdt": 0,
+                "total_pnl_pct": 0,
+                "best_trade_pnl": 0,
+                "worst_trade_pnl": 0,
+                "win_streak": 0,
+                "loss_streak": 0,
+            }
+        )
 
     wins = [t for t in closed if (t.get("pnl_usdt") or 0) > 0]
-    losses = [t for t in closed if (t.get("pnl_usdt") or 0) <= 0]
     pnls = [t.get("pnl_usdt", 0) or 0 for t in closed]
     pnl_pcts = [t.get("pnl_pct", 0) or 0 for t in closed]
 
@@ -2688,26 +2692,28 @@ def api_trade_stats():
         else:
             loss_streak = max(loss_streak, current_streak)
 
-    return jsonify({
-        "total_trades": len(trades),
-        "open_trades": len([t for t in trades if t.get("status") == "open"]),
-        "closed_trades": len(closed),
-        "win_rate": round(len(wins) / len(closed) * 100, 1) if closed else 0,
-        "avg_rr": round(sum(pnl_pcts) / len(pnl_pcts), 2) if pnl_pcts else 0,
-        "total_pnl_usdt": round(sum(pnls), 2),
-        "total_pnl_pct": round(sum(pnl_pcts), 2),
-        "best_trade_pnl": round(max(pnls), 2) if pnls else 0,
-        "worst_trade_pnl": round(min(pnls), 2) if pnls else 0,
-        "win_streak": win_streak,
-        "loss_streak": loss_streak,
-    })
+    return jsonify(
+        {
+            "total_trades": len(trades),
+            "open_trades": len([t for t in trades if t.get("status") == "open"]),
+            "closed_trades": len(closed),
+            "win_rate": round(len(wins) / len(closed) * 100, 1) if closed else 0,
+            "avg_rr": round(sum(pnl_pcts) / len(pnl_pcts), 2) if pnl_pcts else 0,
+            "total_pnl_usdt": round(sum(pnls), 2),
+            "total_pnl_pct": round(sum(pnl_pcts), 2),
+            "best_trade_pnl": round(max(pnls), 2) if pnls else 0,
+            "worst_trade_pnl": round(min(pnls), 2) if pnls else 0,
+            "win_streak": win_streak,
+            "loss_streak": loss_streak,
+        }
+    )
 
 
 # ─── Entry Point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    print("\n" + "="*55)
+    print("\n" + "=" * 55)
     print("  Crypto Signal Dashboard")
     print("  Connecting to ByBit (free, no API key needed)")
     print("  Open: http://localhost:5001")
-    print("="*55 + "\n")
+    print("=" * 55 + "\n")
     app.run(debug=False, host="0.0.0.0", port=5001)
