@@ -11,7 +11,7 @@ from datetime import datetime
 
 
 # ─── Exchange Setup ────────────────────────────────────────────────────────────
-exchange = ccxt.binance({"enableRateLimit": True})
+exchange = ccxt.bybit({"enableRateLimit": True})
 
 SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "DOGE/USDT"]
 
@@ -35,7 +35,7 @@ CONFIG = {
 
 
 def fetch_ohlcv(symbol: str, timeframe: str, limit: int = 250) -> pd.DataFrame | None:
-    """Fetch OHLCV candles from Binance. Returns None on failure."""
+    """Fetch OHLCV candles from ByBit. Returns None on failure."""
     try:
         raw = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
         df = pd.DataFrame(raw, columns=["timestamp", "open", "high", "low", "close", "volume"])
@@ -65,11 +65,15 @@ def check_rule_1_trend(symbol: str) -> dict:
     long_pass = price > ema_val
     short_pass = price < ema_val
 
+    distance = abs(float(price) - float(ema_val))
+    strength = min(distance / (float(ema_val) * 0.02), 1.0) if ema_val != 0 else 0.0
+
     return {
         "rule": "Trend Alignment (4H EMA 200)",
         "description": "Trade only with the dominant 4H trend",
         "long": long_pass,
         "short": short_pass,
+        "strength": round(float(strength), 3),
         "value": f"Price: {price:,.4f}  |  EMA200: {ema_val:,.4f}",
         "signal_hint": "LONG: Price above EMA200  |  SHORT: Price below EMA200",
         "error": False,
@@ -97,11 +101,23 @@ def check_rule_2_rsi(symbol: str) -> dict:
 
     direction = "↑ Rising" if rsi > rsi_prev else "↓ Falling"
 
+    long_mid = (CONFIG["rsi_long_min"] + CONFIG["rsi_long_max"]) / 2
+    short_mid = (CONFIG["rsi_short_min"] + CONFIG["rsi_short_max"]) / 2
+    long_range = (CONFIG["rsi_long_max"] - CONFIG["rsi_long_min"]) / 2
+    short_range = (CONFIG["rsi_short_max"] - CONFIG["rsi_short_min"]) / 2
+    if long_pass:
+        strength = 1.0 - min(abs(float(rsi) - long_mid) / long_range, 1.0)
+    elif short_pass:
+        strength = 1.0 - min(abs(float(rsi) - short_mid) / short_range, 1.0)
+    else:
+        strength = 0.0
+
     return {
         "rule": "RSI Momentum (1H RSI 14)",
         "description": "Momentum confirmation — not overbought/oversold",
         "long": long_pass,
         "short": short_pass,
+        "strength": round(float(strength), 3),
         "value": f"RSI: {rsi:.1f}  |  Prev: {rsi_prev:.1f}  |  {direction}",
         "signal_hint": "LONG: 50–70 rising  |  SHORT: 30–50 falling",
         "error": False,
@@ -129,17 +145,24 @@ def check_rule_3_macd(symbol: str) -> dict:
 
     macd_long = False
     macd_short = False
+    long_strength = 0.0
+    short_strength = 0.0
     lookback = CONFIG["macd_lookback"]
+    freshness_scores = [1.0, 0.66, 0.33]
 
-    for i in range(-lookback, 0):
+    for idx, i in enumerate(range(-1, -lookback - 1, -1)):
         cur_macd = df["macd"].iloc[i]
         cur_sig = df["sig"].iloc[i]
         prev_macd = df["macd"].iloc[i - 1]
         prev_sig = df["sig"].iloc[i - 1]
         if cur_macd > cur_sig and prev_macd <= prev_sig:
             macd_long = True
+            long_strength = max(long_strength, freshness_scores[idx])
         if cur_macd < cur_sig and prev_macd >= prev_sig:
             macd_short = True
+            short_strength = max(short_strength, freshness_scores[idx])
+
+    strength = max(long_strength, short_strength)
 
     cur_macd_val = df["macd"].iloc[-1]
     cur_sig_val = df["sig"].iloc[-1]
@@ -150,6 +173,7 @@ def check_rule_3_macd(symbol: str) -> dict:
         "description": "Momentum shift confirmation via crossover",
         "long": macd_long,
         "short": macd_short,
+        "strength": round(float(strength), 3),
         "value": f"MACD: {cur_macd_val:.4f}  |  Signal: {cur_sig_val:.4f}  |  {above}",
         "signal_hint": f"Crossover within last {lookback} candles",
         "error": False,
@@ -178,11 +202,18 @@ def check_rule_4_ema_stack(symbol: str) -> dict:
     long_pass = price > ema9 > ema21
     short_pass = price < ema9 < ema21
 
+    if long_pass or short_pass:
+        spread = abs(float(price) - float(ema21))
+        strength = min(spread / (float(ema21) * 0.02), 1.0) if ema21 != 0 else 0.0
+    else:
+        strength = 0.0
+
     return {
         "rule": "EMA Stack (15M 9/21)",
         "description": "Short-term price structure aligned with trade direction",
         "long": long_pass,
         "short": short_pass,
+        "strength": round(float(strength), 3),
         "value": f"Price: {price:,.4f}  |  EMA9: {ema9:,.4f}  |  EMA21: {ema21:,.4f}",
         "signal_hint": "LONG: Price > EMA9 > EMA21  |  SHORT: Price < EMA9 < EMA21",
         "error": False,
@@ -205,15 +236,102 @@ def check_rule_5_volume(symbol: str) -> dict:
     ratio = cur_vol / avg_vol if avg_vol > 0 else 0
 
     surge = ratio >= CONFIG["volume_multiplier"]
+    strength = min((float(ratio) - 1.0) / 1.0, 1.0) if ratio > 1.0 else 0.0
 
     return {
         "rule": "Volume Surge (15M 1.2×)",
         "description": "Real buying/selling pressure backing the move",
         "long": surge,
         "short": surge,
+        "strength": round(float(strength), 3),
         "value": f"Volume: {cur_vol:,.0f}  |  Avg: {avg_vol:,.0f}  |  Ratio: {ratio:.2f}×",
         "signal_hint": f"Current volume must be ≥ {CONFIG['volume_multiplier']}× the {CONFIG['volume_avg_period']}-candle average",
         "error": False,
+    }
+
+
+def calculate_trade_setup(analysis: dict, account_balance: float = 1000.0,
+                          risk_pct: float = 0.02, max_leverage: int = 5) -> dict | None:
+    """Calculate trade setup with entry, SL, TP levels, position sizing, and leverage."""
+    if analysis["signal"] not in ("BUY", "SELL"):
+        return None
+
+    entry = analysis["current_price"]
+    if entry is None or entry <= 0:
+        return None
+
+    direction = "LONG" if analysis["signal"] == "BUY" else "SHORT"
+    symbol = analysis["symbol"]
+
+    # Stop Loss: use recent swing low/high from 15M data, fallback to 1.5%
+    sl_pct = 0.015  # default 1.5%
+    try:
+        df = fetch_ohlcv(symbol, "15m", 30)
+        if df is not None and len(df) >= 10:
+            recent = df.iloc[-10:]
+            if direction == "LONG":
+                swing_low = float(recent["low"].min())
+                if swing_low < entry:
+                    sl_pct = (entry - swing_low) / entry
+            else:
+                swing_high = float(recent["high"].max())
+                if swing_high > entry:
+                    sl_pct = (swing_high - entry) / entry
+    except Exception:
+        pass
+
+    sl_pct = max(sl_pct, 0.005)  # minimum 0.5% SL distance
+    sl_pct = min(sl_pct, 0.05)   # maximum 5% SL distance
+
+    if direction == "LONG":
+        stop_loss = entry * (1 - sl_pct)
+        tp1 = entry * 1.02
+        tp2 = entry * 1.05
+        tp3 = entry * 1.08
+    else:
+        stop_loss = entry * (1 + sl_pct)
+        tp1 = entry * 0.98
+        tp2 = entry * 0.95
+        tp3 = entry * 0.92
+
+    # Risk/reward ratios
+    sl_distance = abs(entry - stop_loss)
+    rr1 = round(abs(tp1 - entry) / sl_distance, 2) if sl_distance > 0 else 0
+    rr2 = round(abs(tp2 - entry) / sl_distance, 2) if sl_distance > 0 else 0
+    rr3 = round(abs(tp3 - entry) / sl_distance, 2) if sl_distance > 0 else 0
+
+    # Position sizing based on risk
+    risk_amount = account_balance * risk_pct
+    position_size_usdt = risk_amount / sl_pct if sl_pct > 0 else 0
+    position_size_coin = position_size_usdt / entry if entry > 0 else 0
+
+    # Leverage: auto-calculated 2x-5x based on SL distance
+    leverage = min(max(2, round(1 / sl_pct)), max_leverage)
+
+    return {
+        "symbol": symbol,
+        "direction": direction,
+        "entry_price": round(entry, 6),
+        "stop_loss": round(stop_loss, 6),
+        "sl_pct": round(sl_pct * 100, 2),
+        "tp1": round(tp1, 6),
+        "tp2": round(tp2, 6),
+        "tp3": round(tp3, 6),
+        "tp1_pct": 2.0,
+        "tp2_pct": 5.0,
+        "tp3_pct": 8.0,
+        "rr1": rr1,
+        "rr2": rr2,
+        "rr3": rr3,
+        "leverage": leverage,
+        "risk_amount": round(risk_amount, 2),
+        "position_size_usdt": round(position_size_usdt, 2),
+        "position_size_coin": round(position_size_coin, 6),
+        "account_balance": account_balance,
+        "risk_pct": risk_pct,
+        "confidence_score": analysis["confidence_score"],
+        "confidence_label": analysis["confidence_label"],
+        "timestamp": analysis["timestamp_display"],
     }
 
 
@@ -232,10 +350,15 @@ def analyze(symbol: str) -> dict:
         check_rule_5_volume(symbol),
     ]
 
+    # Rule weights: Rule1=2.0, Rule2=1.5, Rule3=1.5, Rule4=1.0, Rule5=1.0
+    RULE_WEIGHTS = [2.0, 1.5, 1.5, 1.0, 1.0]
+    total_weight = sum(RULE_WEIGHTS)
+
     # Convert numpy types to native Python types for JSON serialization
     for r in rules:
         r["long"] = bool(r["long"])
         r["short"] = bool(r["short"])
+        r["strength"] = float(r.get("strength", 0.0))
         if "error" in r:
             r["error"] = bool(r["error"])
 
@@ -259,7 +382,43 @@ def analyze(symbol: str) -> dict:
         signal = "WAIT"
         signal_color = "gray"
 
-    # Get current price from rule 1 data (it fetches 4H)
+    # Weighted confidence score
+    long_confidence = sum(
+        r["strength"] * w for r, w, passes in zip(rules, RULE_WEIGHTS, rules_long) if passes
+    ) / total_weight * 100
+    short_confidence = sum(
+        r["strength"] * w for r, w, passes in zip(rules, RULE_WEIGHTS, rules_short) if passes
+    ) / total_weight * 100
+
+    if signal == "BUY":
+        confidence_score = round(long_confidence, 1)
+    elif signal == "SELL":
+        confidence_score = round(short_confidence, 1)
+    else:
+        confidence_score = round(max(long_confidence, short_confidence), 1)
+
+    if confidence_score >= 85:
+        confidence_label = "Strong"
+        confidence_color = "green"
+    elif confidence_score >= 70:
+        confidence_label = "Medium"
+        confidence_color = "yellow"
+    else:
+        confidence_label = "Weak"
+        confidence_color = "gray"
+
+    # Signal forming detection (3-4 rules passing = heads up)
+    forming = False
+    forming_direction = None
+    if not all_long and not all_short:
+        if 3 <= long_count <= 4:
+            forming = True
+            forming_direction = "LONG"
+        elif 3 <= short_count <= 4:
+            forming = True
+            forming_direction = "SHORT"
+
+    # Get current price
     try:
         price_df = fetch_ohlcv(symbol, "1m", 2)
         current_price = float(price_df["close"].iloc[-1]) if price_df is not None else None
@@ -274,6 +433,11 @@ def analyze(symbol: str) -> dict:
         "long_rules_met": long_count,
         "short_rules_met": short_count,
         "total_rules": total,
+        "confidence_score": confidence_score,
+        "confidence_label": confidence_label,
+        "confidence_color": confidence_color,
+        "forming": forming,
+        "forming_direction": forming_direction,
         "current_price": current_price,
         "timestamp": datetime.now().isoformat(),
         "timestamp_display": datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC"),

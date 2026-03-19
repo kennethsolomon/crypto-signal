@@ -10,3 +10,5 @@ build/
 .env
 .DS_Store
 .playwright-mcp/
+.shipkit/
+data/
