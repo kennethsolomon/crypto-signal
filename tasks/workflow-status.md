@@ -21,14 +21,14 @@
 | 14 | **Verify Tests** (`/sk:test`) | done | 62 tests pass; 100% new code coverage; 8 tests added for edge cases |
 | 15 | Commit (`/sk:smart-commit`) | done | af2f0ad |
 | 16 | **Security** (`/sk:security-check`) | done | 0 critical/high; 4 medium + 2 low — all pre-existing, none in new rule logic |
-| 17 | Commit (`/sk:smart-commit`) | not yet | >> next << conditional |
-| 18 | Performance (`/sk:perf`) | not yet | optional gate |
+| 17 | Commit (`/sk:smart-commit`) | done | 5639dfd — security fixes |
+| 18 | Performance (`/sk:perf`) | not yet | >> next << optional gate |
 | 19 | Commit (`/sk:smart-commit`) | not yet | conditional |
-| 20 | **Review + Simplify** (`/sk:review`) | not yet | HARD GATE — 0 issues |
-| 21 | Commit (`/sk:smart-commit`) | not yet | conditional |
-| 22 | **E2E** (`/sk:e2e`) | not yet | HARD GATE — all E2E scenarios must pass |
-| 23 | Commit (`/sk:smart-commit`) | not yet | conditional — skip if E2E was clean |
-| 24 | Update (`/sk:update-task`) | not yet | |
-| 25 | Finalize (`/sk:finish-feature`) | not yet | |
+| 20 | **Review + Simplify** (`/sk:review`) | done | simplify pre-pass updated 3 files; 2 warnings + 2 nitpicks found and fixed |
+| 21 | Commit (`/sk:smart-commit`) | done | b7c6ec3 — review fixes |
+| 22 | **E2E** (`/sk:e2e`) | done | All 13 acceptance criteria passed via Playwright MCP; funding badge confirmed; forming banner 4/6 confirmed |
+| 23 | Commit (`/sk:smart-commit`) | skipped | E2E was clean — no fixes needed |
+| 24 | Update (`/sk:update-task`) | done | All 13 criteria checked; completion logged to progress.md |
+| 25 | Finalize (`/sk:finish-feature`) | not yet | >> next << |
 | 26 | Sync Features (`/sk:features`) | not yet | required — sync feature specs after ship |
 | 27 | Release (`/sk:release`) | not yet | optional |

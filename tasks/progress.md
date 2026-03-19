@@ -47,3 +47,12 @@
 | Timestamp | Error | Attempt | Resolution |
 |-----------|-------|---------|------------|
 | (none)    |       |         |            |
+
+### 2026-03-19 Signal Rule Upgrade (Option B) — COMPLETED
+- Branch: `feature/signal-rule-upgrade-state-based`
+- Changes: Replaced 2 event-based rules with state-based (MACD Histogram, OBV Trend); added Rule 6 StochRSI; added funding rate hard block; changed signal threshold to 5/6; updated forming detection to 4+/6; updated all frontend rule rows, badges, and guide text
+- Tests: 62 tests passing, 100% new-code coverage (8 edge-case tests added)
+- Security: 6 findings resolved (timeframe allowlist, safe int parse, float/int try-except, financial param bounds, host 127.0.0.1)
+- Review: simplify pre-pass extracted _stoch_rsi_error, _load_json, _save_json helpers; promoted RULE_WEIGHTS + SIGNAL_THRESHOLD to module level; fixed stale docstring
+- E2E: All 13 acceptance criteria verified via Playwright MCP — funding badge, forming banner, 6-rule UI, X/6 language
+- Files changed: analyzer.py, app.py, tests/test_analyzer.py, tasks/

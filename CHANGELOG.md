@@ -9,13 +9,32 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ## [Unreleased]
 
 ### Added
+- Rule 6: Stochastic RSI (1H) — entry timing filter; LONG when K < 50 and crossing up over D, SHORT when K > 50 and crossing down below D
+- Funding rate hard block filter: fetches ByBit perpetual funding rate and blocks signals when extreme (>0.05% positive blocks LONG, <-0.05% negative blocks SHORT)
+- Funding rate badge in signal card showing current rate with color-coded severity
+- `fetch_funding_rate()` helper function in `analyzer.py`
+- `_stoch_rsi_error()` helper to eliminate repeated early-return patterns
+- `_load_json()` / `_save_json()` helpers in `app.py` for consistent file I/O
+- Module-level constants `RULE_WEIGHTS`, `SIGNAL_THRESHOLD`, `FUNDING_EXTREME_THRESHOLD` in `analyzer.py`
 
 ### Changed
+- Rule 3 (MACD): replaced event-based MACD Crossover with state-based MACD Histogram — passes when histogram is positive and growing (LONG) or negative and falling (SHORT)
+- Rule 5 (Volume): replaced event-based Volume Surge with state-based OBV Trend — passes when On Balance Volume slope is positive (LONG) or negative (SHORT) over last 5 candles
+- Signal threshold changed from "all 5/5 rules" to "5 out of 6 rules" (one miss allowed)
+- Forming detection updated: 4+ rules passing (was 3+); banner shows "4/6 rules passing"
+- Dashboard rule panel updated to show all 6 rules with strength bars
+- All "X/5 rules" references updated to "X/6 rules" throughout UI
+- Trading guide updated to explain MACD Histogram State, OBV Trend, Stochastic RSI, and Funding Rate sections
+- Server binding changed from `0.0.0.0` to `127.0.0.1` for security
 
 ### Fixed
-
-### Deprecated
-
-### Removed
+- `ValueError`/`TypeError` in trade API endpoints when non-numeric values sent for financial fields
+- Unvalidated `timeframe` query parameter now checked against explicit allowlist
+- `limit` query parameter now uses Flask's safe `type=int` parse (was bare `int()`)
+- Financial parameters (`balance`, `risk_pct`, `max_leverage`) now clamped to sane ranges
 
 ### Security
+- Added `ALLOWED_TIMEFRAMES` allowlist for `/api/chart-data` — rejects unknown timeframes with 400
+- Added input bounds validation: `balance ≥ 1`, `risk_pct` 0.1–10%, `leverage` 1–20x
+- Wrapped all float/int casts in trade endpoints with `try/except (ValueError, TypeError)` → 400
+- Changed server bind from `host="0.0.0.0"` to `host="127.0.0.1"` to prevent LAN exposure

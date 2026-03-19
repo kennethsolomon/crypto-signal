@@ -108,19 +108,19 @@ curl -s localhost:5001/api/analyze?symbol=BTC/USDT | python -m json.tool | grep 
 
 ## Acceptance Criteria
 
-- [ ] Rule 3 name is `"MACD Histogram (1H)"` — no longer "MACD Crossover"
-- [ ] Rule 5 name is `"OBV Trend (15M)"` — no longer "Volume Surge"
-- [ ] Rule 6 exists: `"Stochastic RSI (1H)"` with long/short/strength fields
-- [ ] `analyze()` returns `total_rules: 6`
-- [ ] Signal fires when `long_rules_met >= 5` or `short_rules_met >= 5`
-- [ ] Forming detected at 4 or 5 rules passing (not 3)
-- [ ] `funding_rate` and `funding_blocked` present in analyze() response
-- [ ] Extreme funding (>0.05%) blocks signal on correct side
-- [ ] Dashboard shows 6 rule rows in the rules panel
-- [ ] Funding rate badge visible in signal card
-- [ ] "X/6 rules" shown everywhere (was "X/5")
-- [ ] Running `python app.py` starts without errors
-- [ ] At least one coin shows 4/6 or 5/6 rules passing (forming state)
+- [x] Rule 3 name is `"MACD Histogram (1H)"` — no longer "MACD Crossover"
+- [x] Rule 5 name is `"OBV Trend (15M)"` — no longer "Volume Surge"
+- [x] Rule 6 exists: `"Stochastic RSI (1H)"` with long/short/strength fields
+- [x] `analyze()` returns `total_rules: 6`
+- [x] Signal fires when `long_rules_met >= 5` or `short_rules_met >= 5`
+- [x] Forming detected at 4 or 5 rules passing (not 3)
+- [x] `funding_rate` and `funding_blocked` present in analyze() response
+- [x] Extreme funding (>0.05%) blocks signal on correct side
+- [x] Dashboard shows 6 rule rows in the rules panel
+- [x] Funding rate badge visible in signal card
+- [x] "X/6 rules" shown everywhere (was "X/5")
+- [x] Running `python app.py` starts without errors
+- [x] At least one coin shows 4/6 or 5/6 rules passing (forming state)
 
 ## Risks / Unknowns
 
@@ -129,7 +129,9 @@ curl -s localhost:5001/api/analyze?symbol=BTC/USDT | python -m json.tool | grep 
 - Changing signal threshold from 5/5 to 5/6 means two directional signals could theoretically both reach 5/6 simultaneously — resolve by using whichever has more rules or WAIT on tie
 
 ## Results
-- (fill after execution)
+- All 6 plan tasks completed (Waves 1–3). 62 tests passing, 100% new-code coverage.
+- 6 security findings resolved. Review simplify pre-pass updated 3 files. All E2E scenarios passed.
+- Branch: `feature/signal-rule-upgrade-state-based` — commits: a51b08b → e6e4921 → af2f0ad → 5639dfd → b7c6ec3
 
 ## Errors
 | Error | Attempt | Resolution |
