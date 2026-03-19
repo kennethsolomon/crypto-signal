@@ -58,6 +58,15 @@ NEUTRAL_FUNDING = {"rate": 0.0001, "extreme": False, "blocked_side": None}
 BLOCK_LONG = {"rate": 0.0006, "extreme": True, "blocked_side": "LONG"}
 BLOCK_SHORT = {"rate": -0.0006, "extreme": True, "blocked_side": "SHORT"}
 
+RULE_FNS = [
+    "check_rule_1_trend",
+    "check_rule_2_rsi",
+    "check_rule_3_macd",
+    "check_rule_4_ema_stack",
+    "check_rule_5_volume",
+    "check_rule_6_stoch_rsi",
+]
+
 
 def patch_analyze(long_flags, short_flags, funding=None, price_df=None, strength=0.5):
     """Return a list of patches that control all 6 rules + funding + price."""
@@ -66,17 +75,9 @@ def patch_analyze(long_flags, short_flags, funding=None, price_df=None, strength
     if price_df is None:
         price_df = make_ohlcv(2, close_prices=[50000.0, 50100.0])
 
-    rule_fns = [
-        "check_rule_1_trend",
-        "check_rule_2_rsi",
-        "check_rule_3_macd",
-        "check_rule_4_ema_stack",
-        "check_rule_5_volume",
-        "check_rule_6_stoch_rsi",
-    ]
     patches = [
         patch(f"analyzer.{fn}", return_value=make_rule(long_flags[i], short_flags[i], strength))
-        for i, fn in enumerate(rule_fns)
+        for i, fn in enumerate(RULE_FNS)
     ]
     patches.append(patch("analyzer.fetch_funding_rate", return_value=funding))
     patches.append(patch("analyzer.fetch_ohlcv", return_value=price_df))
@@ -611,16 +612,8 @@ class TestAnalyzeSixRules:
 
     def test_current_price_none_when_fetch_raises(self):
         # fetch_ohlcv raises for the price call → current_price should be None, not crash
-        rule_fns = [
-            "check_rule_1_trend",
-            "check_rule_2_rsi",
-            "check_rule_3_macd",
-            "check_rule_4_ema_stack",
-            "check_rule_5_volume",
-            "check_rule_6_stoch_rsi",
-        ]
         with ExitStack() as stack:
-            for fn in rule_fns:
+            for fn in RULE_FNS:
                 stack.enter_context(
                     patch(f"analyzer.{fn}", return_value=make_rule(False, False))
                 )
@@ -632,3 +625,4 @@ class TestAnalyzeSixRules:
             )
             result = analyzer.analyze("BTC/USDT")
         assert result["current_price"] is None
+

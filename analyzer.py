@@ -331,6 +331,19 @@ def check_rule_5_volume(symbol: str) -> dict:
     }
 
 
+def _stoch_rsi_error(value: str) -> dict:
+    return {
+        "rule": "Stochastic RSI (1H)",
+        "long": False,
+        "short": False,
+        "value": value,
+        "description": "Entry timing — buy dips, not tops",
+        "signal_hint": "LONG: K<50 crossing up | SHORT: K>50 crossing down",
+        "strength": 0.0,
+        "error": True,
+    }
+
+
 def check_rule_6_stoch_rsi(symbol: str) -> dict:
     """
     Rule 6: Stochastic RSI Entry Timing
@@ -341,57 +354,21 @@ def check_rule_6_stoch_rsi(symbol: str) -> dict:
     """
     df = fetch_ohlcv(symbol, "1h", 60)
     if df is None or len(df) < 20:
-        return {
-            "rule": "Stochastic RSI (1H)",
-            "long": False,
-            "short": False,
-            "value": "Data unavailable",
-            "description": "Entry timing — buy dips, not tops",
-            "signal_hint": "LONG: K<50 crossing up | SHORT: K>50 crossing down",
-            "strength": 0.0,
-            "error": True,
-        }
+        return _stoch_rsi_error("Data unavailable")
 
     stoch = ta.stochrsi(df["close"], length=14, rsi_length=14, k=3, d=3)
     if stoch is None or stoch.empty:
-        return {
-            "rule": "Stochastic RSI (1H)",
-            "long": False,
-            "short": False,
-            "value": "Indicator unavailable",
-            "description": "Entry timing — buy dips, not tops",
-            "signal_hint": "LONG: K<50 crossing up | SHORT: K>50 crossing down",
-            "strength": 0.0,
-            "error": True,
-        }
+        return _stoch_rsi_error("Indicator unavailable")
 
     k_col = "STOCHRSIk_14_14_3_3"
     d_col = "STOCHRSId_14_14_3_3"
 
     if k_col not in stoch.columns or d_col not in stoch.columns:
-        return {
-            "rule": "Stochastic RSI (1H)",
-            "long": False,
-            "short": False,
-            "value": "Column unavailable",
-            "description": "Entry timing — buy dips, not tops",
-            "signal_hint": "LONG: K<50 crossing up | SHORT: K>50 crossing down",
-            "strength": 0.0,
-            "error": True,
-        }
+        return _stoch_rsi_error("Column unavailable")
 
     stoch = stoch.dropna()
     if len(stoch) < 2:
-        return {
-            "rule": "Stochastic RSI (1H)",
-            "long": False,
-            "short": False,
-            "value": "Insufficient data",
-            "description": "Entry timing — buy dips, not tops",
-            "signal_hint": "LONG: K<50 crossing up | SHORT: K>50 crossing down",
-            "strength": 0.0,
-            "error": True,
-        }
+        return _stoch_rsi_error("Insufficient data")
 
     k_cur = float(stoch[k_col].iloc[-1])
     d_cur = float(stoch[d_col].iloc[-1])
@@ -461,18 +438,18 @@ def calculate_trade_setup(
 
     if direction == "LONG":
         stop_loss = entry - sl_distance_abs
-        tp1 = entry + sl_distance_abs * 1  # 1:1 R:R
-        tp2 = entry + sl_distance_abs * 2  # 1:2 R:R
-        tp3 = entry + sl_distance_abs * 3  # 1:3 R:R
+        tp1 = entry + sl_distance_abs
+        tp2 = entry + sl_distance_abs * 2
+        tp3 = entry + sl_distance_abs * 3
     else:
         stop_loss = entry + sl_distance_abs
-        tp1 = entry - sl_distance_abs * 1  # 1:1 R:R
-        tp2 = entry - sl_distance_abs * 2  # 1:2 R:R
-        tp3 = entry - sl_distance_abs * 3  # 1:3 R:R
+        tp1 = entry - sl_distance_abs
+        tp2 = entry - sl_distance_abs * 2
+        tp3 = entry - sl_distance_abs * 3
 
     # R:R ratios are fixed by design: 1:1, 1:2, 1:3
     rr1, rr2, rr3 = 1.0, 2.0, 3.0
-    tp1_pct = round(sl_pct * 1 * 100, 2)
+    tp1_pct = round(sl_pct * 100, 2)
     tp2_pct = round(sl_pct * 2 * 100, 2)
     tp3_pct = round(sl_pct * 3 * 100, 2)
 

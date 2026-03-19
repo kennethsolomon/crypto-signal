@@ -46,30 +46,33 @@ SIGNALS_PATH = os.path.join(DATA_DIR, "signals.json")
 trades_lock = threading.Lock()
 
 
-def load_trades() -> list:
+def _load_json(path: str) -> list:
     try:
-        with open(TRADES_PATH, "r") as f:
+        with open(path, "r") as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return []
+
+
+def _save_json(path: str, data: list) -> None:
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def load_trades() -> list:
+    return _load_json(TRADES_PATH)
 
 
 def save_trades(trades: list) -> None:
-    with open(TRADES_PATH, "w") as f:
-        json.dump(trades, f, indent=2)
+    _save_json(TRADES_PATH, trades)
 
 
 def load_signals() -> list:
-    try:
-        with open(SIGNALS_PATH, "r") as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return []
+    return _load_json(SIGNALS_PATH)
 
 
 def save_signals(signals: list) -> None:
-    with open(SIGNALS_PATH, "w") as f:
-        json.dump(signals, f, indent=2)
+    _save_json(SIGNALS_PATH, signals)
 
 
 class NumpyJSONProvider(DefaultJSONProvider):
@@ -2680,12 +2683,13 @@ def api_update_trade(trade_id):
 def api_trade_stats():
     trades = load_trades()
     closed = [t for t in trades if t.get("status") == "closed"]
+    open_count = len(trades) - len(closed)
 
     if not closed:
         return jsonify(
             {
                 "total_trades": len(trades),
-                "open_trades": len([t for t in trades if t.get("status") == "open"]),
+                "open_trades": open_count,
                 "closed_trades": 0,
                 "win_rate": 0,
                 "avg_rr": 0,
@@ -2722,7 +2726,7 @@ def api_trade_stats():
     return jsonify(
         {
             "total_trades": len(trades),
-            "open_trades": len([t for t in trades if t.get("status") == "open"]),
+            "open_trades": open_count,
             "closed_trades": len(closed),
             "win_rate": round(len(wins) / len(closed) * 100, 1) if closed else 0,
             "avg_rr": round(sum(pnl_pcts) / len(pnl_pcts), 2) if pnl_pcts else 0,
