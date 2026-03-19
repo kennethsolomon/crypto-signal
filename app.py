@@ -46,30 +46,33 @@ SIGNALS_PATH = os.path.join(DATA_DIR, "signals.json")
 trades_lock = threading.Lock()
 
 
-def load_trades() -> list:
+def _load_json(path: str) -> list:
     try:
-        with open(TRADES_PATH, "r") as f:
+        with open(path, "r") as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return []
+
+
+def _save_json(path: str, data: list) -> None:
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def load_trades() -> list:
+    return _load_json(TRADES_PATH)
 
 
 def save_trades(trades: list) -> None:
-    with open(TRADES_PATH, "w") as f:
-        json.dump(trades, f, indent=2)
+    _save_json(TRADES_PATH, trades)
 
 
 def load_signals() -> list:
-    try:
-        with open(SIGNALS_PATH, "r") as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return []
+    return _load_json(SIGNALS_PATH)
 
 
 def save_signals(signals: list) -> None:
-    with open(SIGNALS_PATH, "w") as f:
-        json.dump(signals, f, indent=2)
+    _save_json(SIGNALS_PATH, signals)
 
 
 class NumpyJSONProvider(DefaultJSONProvider):
@@ -112,13 +115,16 @@ def get_cached_analysis(symbol: str) -> dict:
 
         # Log to history if it's a real signal
         if data["signal"] in ("BUY", "SELL"):
-            signal_history.insert(0, {
-                "symbol": data["symbol"],
-                "signal": data["signal"],
-                "price": data["current_price"],
-                "timestamp": data["timestamp_display"],
-                "confidence": data.get("confidence_score", 0),
-            })
+            signal_history.insert(
+                0,
+                {
+                    "symbol": data["symbol"],
+                    "signal": data["signal"],
+                    "price": data["current_price"],
+                    "timestamp": data["timestamp_display"],
+                    "confidence": data.get("confidence_score", 0),
+                },
+            )
             # Keep only last 50 signals
             del signal_history[50:]
             save_signals(signal_history)
@@ -1396,7 +1402,7 @@ function buildDashboardHTML(data) {
             <div class="hist-price">${h.price ? "$" + Number(h.price).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:6}) : "—"}</div>
           </div>
         </div>`).join("")
-    : `<div class="no-signals">No signals fired yet.<br>Signals appear here when all 5 rules pass.</div>`;
+    : `<div class="no-signals">No signals fired yet.<br>Signals appear here when 5/6 rules pass.</div>`;
 
   const formingDisplay = data.forming ? "block" : "none";
   const formingText = data.forming
@@ -1434,11 +1440,12 @@ function buildDashboardHTML(data) {
           <div class="progress-bar-wrap">
             <div class="progress-bar-fill ${confFill}" id="live-confidence-bar" style="width:${confScore}%"></div>
           </div>
+          <div id="live-funding-badge" style="margin-top:6px;font-size:0.78rem;color:var(--muted)">Funding: —</div>
         </div>
 
         <!-- Rules Panel -->
         <div class="rules-panel">
-          <div class="rules-header">📋 Rule Checklist — All 5 must pass</div>
+          <div class="rules-header">📋 Rule Checklist — 5/6 must pass</div>
           ${rulesHtml}
         </div>
 
@@ -1490,7 +1497,7 @@ function buildDashboardHTML(data) {
           </div>
           <div class="framework-row">
             <div class="fw-label">Signal Logic</div>
-            <div class="fw-value">ALL 5 rules must pass</div>
+            <div class="fw-value">5/6 rules must pass</div>
           </div>
           <div class="framework-row">
             <div class="fw-label">Target Trades/Day</div>
@@ -1525,8 +1532,17 @@ function buildDashboardHTML(data) {
           </button>
           <div class="guide-content" id="guide-content">
             <div class="guide-section">
-              <div class="guide-section-title">How the 5-Rule Framework Works</div>
-              <p>The framework uses a confluence-based approach: a signal only fires when ALL 5 independent technical rules agree on direction. Each rule analyzes a different aspect of price action (trend, momentum, volume, structure, multi-timeframe alignment). This high bar filters out noise and produces fewer but higher-quality setups. The more rules that align strongly, the higher the confidence score.</p>
+              <div class="guide-section-title">How the 6-Rule Framework Works</div>
+              <p>The framework uses a confluence-based approach: a signal fires when 5 out of 6 independent technical rules agree on direction (one miss allowed). Each rule analyzes a different aspect of price action across multiple timeframes. The 6 rules are: Trend (4H EMA 200), RSI Momentum (1H), MACD Histogram (1H), EMA Stack (15M), OBV Trend (15M), and Stochastic RSI entry timing (1H). The more rules that align strongly, the higher the confidence score.</p>
+            </div>
+            <div class="guide-section">
+              <div class="guide-section-title">New Rules Explained</div>
+              <ul>
+                <li><strong>MACD Histogram (1H)</strong> — Replaces MACD Crossover. Instead of waiting for a rare crossover event, this rule checks that the MACD histogram is positive AND growing for 3 consecutive candles. This means momentum is actively building in the signal direction, not just starting.</li>
+                <li><strong>OBV Trend (15M)</strong> — Replaces Volume Surge. On Balance Volume measures whether volume is driven by buyers or sellers. A rising OBV slope = net buyers. A falling OBV slope = net sellers. More reliable than checking if a single candle had high volume.</li>
+                <li><strong>Stochastic RSI (1H)</strong> — New rule for entry timing. Prevents you from entering at the top of a move. For LONG: fires when StochRSI K line is below 50 (not overbought) and crosses up over D (oversold bounce in an uptrend). For SHORT: fires when K is above 50 and crosses down. This catches dips within trends.</li>
+                <li><strong>Funding Rate Filter</strong> — ByBit perpetuals charge a funding rate every 8 hours. When funding is extremely positive (≥ +0.05%), the market is overloaded with longs and a squeeze is likely — LONG signals are blocked. When extremely negative (≤ -0.05%), SHORT signals are blocked. This is free, exchange-native information that most traders ignore.</li>
+              </ul>
             </div>
             <div class="guide-section">
               <div class="guide-section-title">Signal Confidence Levels</div>
@@ -1721,6 +1737,30 @@ function updateDashboardValues(data) {
   if (confBar) {
     confBar.style.width = confScore + "%";
     confBar.className = "progress-bar-fill " + confFill;
+  }
+
+  // Update funding rate badge
+  const fundingEl = document.getElementById("live-funding-badge");
+  if (fundingEl) {
+    const fr = data.funding_rate;
+    const blocked = data.funding_blocked;
+    if (fr == null) {
+      fundingEl.textContent = "Funding: N/A";
+      fundingEl.style.color = "var(--muted)";
+    } else {
+      const frPct = (fr * 100).toFixed(4);
+      const frSign = fr >= 0 ? "+" : "";
+      if (blocked) {
+        fundingEl.innerHTML = `Funding: ${frSign}${frPct}% <span style="color:var(--red);font-weight:600">BLOCKED (${blocked})</span>`;
+        fundingEl.style.color = "var(--red)";
+      } else if (Math.abs(fr) >= 0.0003) {
+        fundingEl.textContent = `Funding: ${frSign}${frPct}% ⚠`;
+        fundingEl.style.color = "var(--yellow)";
+      } else {
+        fundingEl.textContent = `Funding: ${frSign}${frPct}%`;
+        fundingEl.style.color = "var(--muted)";
+      }
+    }
   }
 
   // Forming banner
@@ -2486,13 +2526,19 @@ def api_symbols():
     return jsonify(SYMBOLS)
 
 
+ALLOWED_TIMEFRAMES = {"1m", "5m", "15m", "1h", "4h", "1d"}
+
+
 @app.route("/api/chart-data")
 def api_chart_data():
     symbol = request.args.get("symbol", SYMBOLS[0])
     if symbol not in SYMBOLS:
         return jsonify({"error": "Unknown symbol"}), 400
     timeframe = request.args.get("timeframe", "15m")
-    limit = min(int(request.args.get("limit", 100)), 300)
+    if timeframe not in ALLOWED_TIMEFRAMES:
+        return jsonify({"error": "Invalid timeframe"}), 400
+    limit = request.args.get("limit", 100, type=int) or 100
+    limit = min(limit, 300)
     data = get_chart_data(symbol, timeframe, limit)
     if data is None:
         return jsonify({"error": "Chart data unavailable"}), 500
@@ -2505,9 +2551,15 @@ def api_trade_setup():
     if symbol not in SYMBOLS:
         return jsonify({"error": "Unknown symbol"}), 400
     settings = load_settings()
-    balance = float(request.args.get("balance", settings["account_balance"]))
-    risk_pct = float(request.args.get("risk_pct", settings["risk_pct"]))
-    max_lev = int(request.args.get("max_leverage", settings["max_leverage"]))
+    try:
+        balance = float(request.args.get("balance", settings["account_balance"]))
+        risk_pct = float(request.args.get("risk_pct", settings["risk_pct"]))
+        max_lev = int(request.args.get("max_leverage", settings["max_leverage"]))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid parameter value"}), 400
+    balance = max(balance, 1.0)
+    risk_pct = max(0.001, min(risk_pct, 0.10))
+    max_lev = max(1, min(max_lev, 20))
     analysis = get_cached_analysis(symbol)
     setup = calculate_trade_setup(analysis, balance, risk_pct, max_lev)
     if setup is None:
@@ -2523,13 +2575,18 @@ def api_get_settings():
 @app.route("/api/settings", methods=["POST"])
 def api_save_settings():
     data = request.get_json(force=True)
+    if data is None:
+        return jsonify({"error": "Invalid JSON"}), 400
     settings = load_settings()
-    if "account_balance" in data:
-        settings["account_balance"] = float(data["account_balance"])
-    if "risk_pct" in data:
-        settings["risk_pct"] = float(data["risk_pct"])
-    if "max_leverage" in data:
-        settings["max_leverage"] = int(data["max_leverage"])
+    try:
+        if "account_balance" in data:
+            settings["account_balance"] = max(float(data["account_balance"]), 1.0)
+        if "risk_pct" in data:
+            settings["risk_pct"] = max(0.001, min(float(data["risk_pct"]), 0.10))
+        if "max_leverage" in data:
+            settings["max_leverage"] = max(1, min(int(data["max_leverage"]), 20))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid setting value"}), 400
     save_settings(settings)
     return jsonify(settings)
 
@@ -2549,8 +2606,9 @@ def api_get_trades():
 @app.route("/api/trades", methods=["POST"])
 def api_create_trade():
     data = request.get_json(force=True)
-    with trades_lock:
-        trades = load_trades()
+    if data is None:
+        return jsonify({"error": "Invalid JSON"}), 400
+    try:
         trade = {
             "id": int(time.time() * 1000),
             "symbol": data.get("symbol", ""),
@@ -2575,6 +2633,10 @@ def api_create_trade():
             "closed_at": None,
             "notes": data.get("notes", ""),
         }
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid trade data"}), 400
+    with trades_lock:
+        trades = load_trades()
         trades.insert(0, trade)
         save_trades(trades)
     return jsonify(trade), 201
@@ -2583,6 +2645,8 @@ def api_create_trade():
 @app.route("/api/trades/<int:trade_id>", methods=["PUT"])
 def api_update_trade(trade_id):
     data = request.get_json(force=True)
+    if data is None:
+        return jsonify({"error": "Invalid JSON"}), 400
     with trades_lock:
         trades = load_trades()
         trade = next((t for t in trades if t["id"] == trade_id), None)
@@ -2590,7 +2654,10 @@ def api_update_trade(trade_id):
             return jsonify({"error": "Trade not found"}), 404
 
         if "exit_price" in data and data["exit_price"] is not None:
-            exit_price = float(data["exit_price"])
+            try:
+                exit_price = float(data["exit_price"])
+            except (ValueError, TypeError):
+                return jsonify({"error": "Invalid exit_price"}), 400
             trade["exit_price"] = exit_price
             trade["exit_reason"] = data.get("exit_reason", "manual")
             trade["status"] = "closed"
@@ -2616,24 +2683,26 @@ def api_update_trade(trade_id):
 def api_trade_stats():
     trades = load_trades()
     closed = [t for t in trades if t.get("status") == "closed"]
+    open_count = len(trades) - len(closed)
 
     if not closed:
-        return jsonify({
-            "total_trades": len(trades),
-            "open_trades": len([t for t in trades if t.get("status") == "open"]),
-            "closed_trades": 0,
-            "win_rate": 0,
-            "avg_rr": 0,
-            "total_pnl_usdt": 0,
-            "total_pnl_pct": 0,
-            "best_trade_pnl": 0,
-            "worst_trade_pnl": 0,
-            "win_streak": 0,
-            "loss_streak": 0,
-        })
+        return jsonify(
+            {
+                "total_trades": len(trades),
+                "open_trades": open_count,
+                "closed_trades": 0,
+                "win_rate": 0,
+                "avg_rr": 0,
+                "total_pnl_usdt": 0,
+                "total_pnl_pct": 0,
+                "best_trade_pnl": 0,
+                "worst_trade_pnl": 0,
+                "win_streak": 0,
+                "loss_streak": 0,
+            }
+        )
 
     wins = [t for t in closed if (t.get("pnl_usdt") or 0) > 0]
-    losses = [t for t in closed if (t.get("pnl_usdt") or 0) <= 0]
     pnls = [t.get("pnl_usdt", 0) or 0 for t in closed]
     pnl_pcts = [t.get("pnl_pct", 0) or 0 for t in closed]
 
@@ -2654,26 +2723,28 @@ def api_trade_stats():
         else:
             loss_streak = max(loss_streak, current_streak)
 
-    return jsonify({
-        "total_trades": len(trades),
-        "open_trades": len([t for t in trades if t.get("status") == "open"]),
-        "closed_trades": len(closed),
-        "win_rate": round(len(wins) / len(closed) * 100, 1) if closed else 0,
-        "avg_rr": round(sum(pnl_pcts) / len(pnl_pcts), 2) if pnl_pcts else 0,
-        "total_pnl_usdt": round(sum(pnls), 2),
-        "total_pnl_pct": round(sum(pnl_pcts), 2),
-        "best_trade_pnl": round(max(pnls), 2) if pnls else 0,
-        "worst_trade_pnl": round(min(pnls), 2) if pnls else 0,
-        "win_streak": win_streak,
-        "loss_streak": loss_streak,
-    })
+    return jsonify(
+        {
+            "total_trades": len(trades),
+            "open_trades": open_count,
+            "closed_trades": len(closed),
+            "win_rate": round(len(wins) / len(closed) * 100, 1) if closed else 0,
+            "avg_rr": round(sum(pnl_pcts) / len(pnl_pcts), 2) if pnl_pcts else 0,
+            "total_pnl_usdt": round(sum(pnls), 2),
+            "total_pnl_pct": round(sum(pnl_pcts), 2),
+            "best_trade_pnl": round(max(pnls), 2) if pnls else 0,
+            "worst_trade_pnl": round(min(pnls), 2) if pnls else 0,
+            "win_streak": win_streak,
+            "loss_streak": loss_streak,
+        }
+    )
 
 
 # ─── Entry Point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    print("\n" + "="*55)
+    print("\n" + "=" * 55)
     print("  Crypto Signal Dashboard")
     print("  Connecting to ByBit (free, no API key needed)")
     print("  Open: http://localhost:5001")
-    print("="*55 + "\n")
-    app.run(debug=False, host="0.0.0.0", port=5001)
+    print("=" * 55 + "\n")
+    app.run(debug=False, host="127.0.0.1", port=5001)
