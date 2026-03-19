@@ -822,6 +822,85 @@ DASHBOARD_HTML = """
       font-family: monospace;
     }
 
+    /* ── Manual Trade Form ── */
+    .manual-trade-form {
+      padding: 16px 18px;
+    }
+
+    .mtf-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .mtf-row.full { grid-template-columns: 1fr; }
+
+    .mtf-field label {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .mtf-field input,
+    .mtf-field select {
+      width: 100%;
+      padding: 7px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      font-size: 12px;
+      font-family: monospace;
+      outline: none;
+    }
+
+    .mtf-field input:focus,
+    .mtf-field select:focus { border-color: var(--accent); }
+
+    .mtf-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .btn-submit-trade {
+      background: var(--green);
+      border: none;
+      color: #fff;
+      padding: 8px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .btn-submit-trade:hover { opacity: 0.85; }
+
+    .btn-prefill-trade {
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .btn-prefill-trade:hover { opacity: 0.85; }
+
+    .mtf-msg {
+      font-size: 11px;
+      margin-top: 8px;
+      padding: 6px 10px;
+      border-radius: 4px;
+    }
+
+    .mtf-msg.success { background: var(--green-bg); color: var(--green); }
+    .mtf-msg.error { background: var(--red-bg); color: var(--red); }
+
     /* ── Settings Panel ── */
     .settings-row {
       padding: 10px 18px;
@@ -1430,10 +1509,81 @@ function buildDashboardHTML(data) {
         <button class="journal-tab active" onclick="switchJournalTab('open')" id="jtab-open">Open Trades</button>
         <button class="journal-tab" onclick="switchJournalTab('closed')" id="jtab-closed">Closed Trades</button>
         <button class="journal-tab" onclick="switchJournalTab('stats')" id="jtab-stats">Stats</button>
+        <button class="journal-tab" onclick="switchJournalTab('add')" id="jtab-add">+ Add Trade</button>
       </div>
       <div class="journal-tab-content active" id="journal-open"></div>
       <div class="journal-tab-content" id="journal-closed"></div>
       <div class="journal-tab-content" id="journal-stats"></div>
+      <div class="journal-tab-content" id="journal-add">
+        <div class="manual-trade-form">
+          <div class="mtf-row">
+            <div class="mtf-field">
+              <label>Symbol</label>
+              <select id="mtf-symbol">
+                ${SYMBOLS.map(s => '<option value="' + s + '">' + s + '</option>').join('')}
+              </select>
+            </div>
+            <div class="mtf-field">
+              <label>Direction</label>
+              <select id="mtf-direction">
+                <option value="LONG">LONG</option>
+                <option value="SHORT">SHORT</option>
+              </select>
+            </div>
+          </div>
+          <div class="mtf-row">
+            <div class="mtf-field">
+              <label>Entry Price</label>
+              <input type="number" id="mtf-entry" step="any" placeholder="e.g. 84000">
+            </div>
+            <div class="mtf-field">
+              <label>Stop Loss</label>
+              <input type="number" id="mtf-sl" step="any" placeholder="e.g. 83500">
+            </div>
+          </div>
+          <div class="mtf-row">
+            <div class="mtf-field">
+              <label>TP1</label>
+              <input type="number" id="mtf-tp1" step="any" placeholder="e.g. 84500">
+            </div>
+            <div class="mtf-field">
+              <label>TP2</label>
+              <input type="number" id="mtf-tp2" step="any" placeholder="e.g. 85000">
+            </div>
+          </div>
+          <div class="mtf-row">
+            <div class="mtf-field">
+              <label>TP3</label>
+              <input type="number" id="mtf-tp3" step="any" placeholder="e.g. 85500">
+            </div>
+            <div class="mtf-field">
+              <label>Leverage</label>
+              <input type="number" id="mtf-leverage" value="3" min="1" max="10" step="1">
+            </div>
+          </div>
+          <div class="mtf-row">
+            <div class="mtf-field">
+              <label>Position Size (USDT)</label>
+              <input type="number" id="mtf-size-usdt" step="any" placeholder="e.g. 500">
+            </div>
+            <div class="mtf-field">
+              <label>Position Size (Coin)</label>
+              <input type="number" id="mtf-size-coin" step="any" placeholder="e.g. 0.006">
+            </div>
+          </div>
+          <div class="mtf-row full">
+            <div class="mtf-field">
+              <label>Notes (optional)</label>
+              <input type="text" id="mtf-notes" placeholder="e.g. Breakout trade, strong volume">
+            </div>
+          </div>
+          <div class="mtf-actions">
+            <button class="btn-submit-trade" onclick="submitManualTrade()">Log Trade</button>
+            <button class="btn-prefill-trade" onclick="prefillFromSetup()">Prefill from Signal</button>
+          </div>
+          <div id="mtf-message"></div>
+        </div>
+      </div>
     </div>`;
 }
 
@@ -1997,6 +2147,89 @@ function renderStats(stats) {
       <div class="stat-card-value" style="color:var(--red)">${stats.loss_streak}</div>
     </div>
   </div>`;
+}
+
+// ── Manual Trade Entry ────────────────────────────────────────────────────
+function prefillFromSetup() {
+  if (!lastTradeSetup) {
+    showMtfMsg('No active trade setup to prefill from.', 'error');
+    return;
+  }
+  const d = lastTradeSetup;
+  const el = (id) => document.getElementById(id);
+  if (el('mtf-symbol')) el('mtf-symbol').value = d.symbol || activeSymbol;
+  if (el('mtf-direction')) el('mtf-direction').value = d.direction || 'LONG';
+  if (el('mtf-entry')) el('mtf-entry').value = d.entry_price || '';
+  if (el('mtf-sl')) el('mtf-sl').value = d.stop_loss || '';
+  if (el('mtf-tp1')) el('mtf-tp1').value = d.tp1 || '';
+  if (el('mtf-tp2')) el('mtf-tp2').value = d.tp2 || '';
+  if (el('mtf-tp3')) el('mtf-tp3').value = d.tp3 || '';
+  if (el('mtf-leverage')) el('mtf-leverage').value = d.leverage || 3;
+  if (el('mtf-size-usdt')) el('mtf-size-usdt').value = d.position_size_usdt || '';
+  if (el('mtf-size-coin')) el('mtf-size-coin').value = d.position_size_coin || '';
+  showMtfMsg('Prefilled from current signal setup.', 'success');
+}
+
+async function submitManualTrade() {
+  const el = (id) => document.getElementById(id);
+  const entry = parseFloat(el('mtf-entry')?.value);
+  const symbol = el('mtf-symbol')?.value;
+  const direction = el('mtf-direction')?.value;
+
+  if (!entry || !symbol || !direction) {
+    showMtfMsg('Symbol, Direction, and Entry Price are required.', 'error');
+    return;
+  }
+
+  const settings = window._settingsCache || { risk_pct: 0.02 };
+  const payload = {
+    symbol: symbol,
+    direction: direction,
+    entry_price: entry,
+    stop_loss: parseFloat(el('mtf-sl')?.value) || 0,
+    tp1: parseFloat(el('mtf-tp1')?.value) || 0,
+    tp2: parseFloat(el('mtf-tp2')?.value) || 0,
+    tp3: parseFloat(el('mtf-tp3')?.value) || 0,
+    leverage: parseInt(el('mtf-leverage')?.value) || 3,
+    position_size_usdt: parseFloat(el('mtf-size-usdt')?.value) || 0,
+    position_size_coin: parseFloat(el('mtf-size-coin')?.value) || 0,
+    risk_pct: settings.risk_pct || 0.02,
+    risk_amount: 0,
+    confidence_score: 0,
+    notes: el('mtf-notes')?.value || '',
+  };
+
+  // Calculate risk amount if SL is provided
+  if (payload.stop_loss > 0 && payload.position_size_usdt > 0) {
+    const slDist = Math.abs(payload.entry_price - payload.stop_loss) / payload.entry_price;
+    payload.risk_amount = Math.round(payload.position_size_usdt * slDist * 100) / 100;
+  }
+
+  try {
+    const res = await fetch('/api/trades', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Failed');
+    showMtfMsg('Trade logged successfully!', 'success');
+    // Clear form
+    ['mtf-entry','mtf-sl','mtf-tp1','mtf-tp2','mtf-tp3','mtf-size-usdt','mtf-size-coin','mtf-notes'].forEach(id => {
+      if (el(id)) el(id).value = '';
+    });
+    fetchJournal();
+    // Switch to open trades tab after 1s
+    setTimeout(() => switchJournalTab('open'), 1000);
+  } catch (e) {
+    showMtfMsg('Failed to log trade. Try again.', 'error');
+  }
+}
+
+function showMtfMsg(text, type) {
+  const el = document.getElementById('mtf-message');
+  if (!el) return;
+  el.innerHTML = '<div class="mtf-msg ' + type + '">' + text + '</div>';
+  setTimeout(() => { if (el) el.innerHTML = ''; }, 3000);
 }
 
 // ── Settings ───────────────────────────────────────────────────────────────
