@@ -1,7 +1,7 @@
 """
 analyzer.py - Trading Signal Engine
-5-Rule Confluence Framework for Crypto Day Trading
-Signals only fire when ALL rules are met.
+6-Rule Confluence Framework for Crypto Day Trading
+Signal fires when 5/6 rules pass (one miss allowed).
 """
 
 import ccxt
@@ -26,15 +26,14 @@ CONFIG = {
     "macd_fast": 12,
     "macd_slow": 26,
     "macd_signal": 9,
-    "macd_lookback": 3,  # How many candles back to look for crossover
     "ema_fast": 9,  # 15M fast EMA
     "ema_slow": 21,  # 15M slow EMA
-    "volume_multiplier": 1.2,  # Volume must be this x the average
-    "volume_avg_period": 20,  # Period for average volume
 }
 
 
 FUNDING_EXTREME_THRESHOLD = 0.0005  # 0.05% — blocks signal on that side
+RULE_WEIGHTS = [2.0, 1.5, 1.5, 1.0, 1.0, 1.0]  # Rule1–Rule6; total = 8.0
+SIGNAL_THRESHOLD = 5  # 5/6 rules required to fire a signal
 
 
 def fetch_funding_rate(symbol: str) -> dict:
@@ -538,8 +537,6 @@ def analyze(symbol: str) -> dict:
         check_rule_6_stoch_rsi(symbol),
     ]
 
-    # Rule weights: Rule1=2.0, Rule2=1.5, Rule3=1.5, Rule4=1.0, Rule5=1.0, Rule6=1.0
-    RULE_WEIGHTS = [2.0, 1.5, 1.5, 1.0, 1.0, 1.0]
     total_weight = sum(RULE_WEIGHTS)
 
     # Convert numpy types to native Python types for JSON serialization
@@ -558,7 +555,6 @@ def analyze(symbol: str) -> dict:
     total = len(rules)
 
     # Signal threshold: 5/6 rules required (one miss allowed)
-    SIGNAL_THRESHOLD = 5
     if long_count >= SIGNAL_THRESHOLD and long_count > short_count:
         signal = "BUY"
         signal_color = "green"
@@ -625,7 +621,7 @@ def analyze(symbol: str) -> dict:
         confidence_label = "Weak"
         confidence_color = "gray"
 
-    # Forming detection: exactly 4/6 rules passing = heads up (5/6 = real signal)
+    # Forming detection: 4+ rules passing = heads up (5/6 = real signal; 5/5 tie stays WAIT)
     forming = False
     forming_direction = None
     if signal == "WAIT":
