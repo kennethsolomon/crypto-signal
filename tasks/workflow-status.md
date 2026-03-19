@@ -29,6 +29,6 @@
 | 22 | **E2E** (`/sk:e2e`) | done | All 13 acceptance criteria passed via Playwright MCP; funding badge confirmed; forming banner 4/6 confirmed |
 | 23 | Commit (`/sk:smart-commit`) | skipped | E2E was clean — no fixes needed |
 | 24 | Update (`/sk:update-task`) | done | All 13 criteria checked; completion logged to progress.md |
-| 25 | Finalize (`/sk:finish-feature`) | not yet | >> next << |
-| 26 | Sync Features (`/sk:features`) | not yet | required — sync feature specs after ship |
-| 27 | Release (`/sk:release`) | not yet | optional |
+| 25 | Finalize (`/sk:finish-feature`) | done | CHANGELOG + arch log committed; PR #1 created |
+| 26 | Sync Features (`/sk:features`) | done | Created from scratch: 3 specs + master index (d09dad8) |
+| 27 | Release (`/sk:release`) | skipped | user confirmed skip |
