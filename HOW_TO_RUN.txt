@@ -1,0 +1,64 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Crypto Signal Dashboard — Setup Guide
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+REQUIREMENTS
+  - Python 3.10 or newer
+  - Internet connection (fetches data from Binance)
+  - No API key needed (uses public endpoints)
+
+STEP 1 — Install Python packages
+  Open terminal in this folder and run:
+
+    pip install -r requirements.txt
+
+STEP 2 — Start the app
+
+    python app.py
+
+STEP 3 — Open your browser
+
+    http://localhost:5000
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  THE 5-RULE CONFLUENCE FRAMEWORK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+A signal fires ONLY when ALL 5 rules pass simultaneously.
+This keeps you to 1-2 high-quality trades per day.
+
+  Rule 1 — Trend Alignment (4H)
+    Price above 200 EMA = bullish, only take longs
+    Price below 200 EMA = bearish, only take shorts
+
+  Rule 2 — RSI Momentum (1H)
+    Long:  RSI between 50–70 AND rising
+    Short: RSI between 30–50 AND falling
+
+  Rule 3 — MACD Crossover (1H)
+    Long:  MACD crossed above signal in last 3 candles
+    Short: MACD crossed below signal in last 3 candles
+
+  Rule 4 — EMA Stack (15M)
+    Long:  Price > EMA9 > EMA21
+    Short: Price < EMA9 < EMA21
+
+  Rule 5 — Volume Surge (15M)
+    Current volume must be ≥ 1.2× the 20-candle average
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SUPPORTED PAIRS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  BTC/USDT, ETH/USDT, SOL/USDT, BNB/USDT,
+  XRP/USDT, DOGE/USDT
+
+  To add more pairs, edit the SYMBOLS list in analyzer.py
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  DISCLAIMER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  This tool is for informational purposes only.
+  Trading cryptocurrencies involves significant risk.
+  Always use proper risk management and position sizing.
+  Never trade more than you can afford to lose.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
