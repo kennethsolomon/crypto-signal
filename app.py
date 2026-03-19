@@ -6,7 +6,7 @@ Then open: http://localhost:5000
 
 from flask import Flask, jsonify, render_template_string, request
 from flask.json.provider import DefaultJSONProvider
-from analyzer import analyze, calculate_trade_setup, SYMBOLS
+from analyzer import analyze, calculate_trade_setup, get_chart_data, SYMBOLS
 from datetime import datetime
 import threading
 import time
@@ -941,7 +941,29 @@ DASHBOARD_HTML = """
     .conf-dot.green { background: var(--green); }
     .conf-dot.yellow { background: var(--yellow); }
     .conf-dot.gray { background: var(--muted); }
+    /* ── Chart Timeframe Selector ── */
+    .chart-tf-bar {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+
+    .chart-tf-btn {
+      padding: 4px 12px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+
+    .chart-tf-btn:hover { border-color: var(--blue); color: var(--text); }
+    .chart-tf-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
   </style>
+  <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
 
@@ -995,6 +1017,12 @@ let countdownTimer = null;
 let refreshMode = 'polling'; // 'polling' (60s) or 'realtime' (10s)
 let soundEnabled = false;
 let lastNotifiedState = {}; // { symbol: { signal, forming } }
+let isFirstRender = true;
+let chartInstance = null;
+let candleSeries = null;
+let ema9Series = null;
+let ema21Series = null;
+let activeTimeframe = '15m';
 
 // ── Notification permission ────────────────────────────────────────────────
 if ('Notification' in window) {
@@ -1093,10 +1121,23 @@ async function loadAllSymbols() {
 
 // ── Load a specific symbol ─────────────────────────────────────────────────
 async function loadSymbol(symbol, force = false) {
+  const symbolChanged = activeSymbol !== symbol;
   activeSymbol = symbol;
   renderTabs();
-  document.getElementById("content").innerHTML = `
-    <div class="loading"><div class="spinner"></div>Analyzing ${symbol}…</div>`;
+
+  if (symbolChanged || isFirstRender) {
+    isFirstRender = true;
+    // Destroy old chart on symbol switch
+    if (chartInstance) {
+      chartInstance.remove();
+      chartInstance = null;
+      candleSeries = null;
+      ema9Series = null;
+      ema21Series = null;
+    }
+    document.getElementById("content").innerHTML = `
+      <div class="loading"><div class="spinner"></div>Analyzing ${symbol}…</div>`;
+  }
 
   try {
     const url = `/api/analyze?symbol=${encodeURIComponent(symbol)}${force ? "&force=1" : ""}`;
@@ -1110,6 +1151,7 @@ async function loadSymbol(symbol, force = false) {
   } catch (e) {
     document.getElementById("content").innerHTML =
       `<div class="loading" style="color:var(--red)">⚠ Failed to load data. Check your connection.</div>`;
+    isFirstRender = true;
   }
 }
 
@@ -1129,45 +1171,64 @@ function renderTabs() {
   }).join("");
 }
 
-// ── Render the main dashboard ──────────────────────────────────────────────
+// ── Render the main dashboard (SPA-like: build once, update values) ────────
 function renderDashboard(data) {
-  const sigClass = data.signal;
-  const longPct = Math.round((data.long_rules_met / data.total_rules) * 100);
-  const shortPct = Math.round((data.short_rules_met / data.total_rules) * 100);
+  const content = document.getElementById("content");
+  if (isFirstRender) {
+    content.innerHTML = buildDashboardHTML(data);
+    isFirstRender = false;
+    loadChart(data.symbol);
+    attachSettingsListeners();
+    fetchJournal();
+  } else {
+    updateDashboardValues(data);
+  }
+  fetchTradeSetup(data.symbol, data.signal);
+  checkAndNotify(data);
+}
 
+function formatPrice(price) {
+  if (!price) return "—";
+  return "$" + Number(price).toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 6});
+}
+
+function getConfFill(color) {
+  const map = { green: "fill-green", yellow: "fill-yellow", gray: "fill-gray" };
+  return map[color] || "fill-gray";
+}
+
+function getRuleIcon(r) {
+  return r.long && r.short ? "✅" : r.long ? "🟢" : r.short ? "🔴" : "⬜";
+}
+
+function buildDashboardHTML(data) {
   const confScore = data.confidence_score != null ? data.confidence_score : 0;
   const confLabel = data.confidence_label || "";
-  const confColorMap = { green: "fill-green", yellow: "fill-yellow", gray: "fill-gray" };
-  const confFill = confColorMap[data.confidence_color] || "fill-gray";
+  const confFill = getConfFill(data.confidence_color);
+  const priceDisplay = formatPrice(data.current_price);
 
-  const priceDisplay = data.current_price
-    ? `$${Number(data.current_price).toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 6})}`
-    : "—";
-
-  // Rules HTML
-  const rulesHtml = data.rules.map(r => {
-    const icon = r.long && r.short ? "✅" : r.long ? "🟢" : r.short ? "🔴" : "⬜";
-    const longPill = `<span class="pill ${r.long ? 'pill-pass-long' : 'pill-fail-long'}">${r.long ? "✓ LONG" : "✗ LONG"}</span>`;
-    const shortPill = `<span class="pill ${r.short ? 'pill-pass-short' : 'pill-fail-short'}">${r.short ? "✓ SHORT" : "✗ SHORT"}</span>`;
+  const rulesHtml = data.rules.map((r, i) => {
+    const icon = getRuleIcon(r);
+    const longPill = `<span id="rule-${i}-long-pill" class="pill ${r.long ? 'pill-pass-long' : 'pill-fail-long'}">${r.long ? "✓ LONG" : "✗ LONG"}</span>`;
+    const shortPill = `<span id="rule-${i}-short-pill" class="pill ${r.short ? 'pill-pass-short' : 'pill-fail-short'}">${r.short ? "✓ SHORT" : "✗ SHORT"}</span>`;
     const strength = r.strength != null ? r.strength : 0;
     const strengthPct = Math.round(strength * 100);
     const strengthColor = strength > 0.7 ? 'var(--green)' : strength > 0.4 ? 'var(--yellow)' : 'var(--muted)';
     return `
       <div class="rule-row">
-        <div class="rule-icon">${icon}</div>
+        <div class="rule-icon" id="rule-${i}-icon">${icon}</div>
         <div style="flex:1">
-          <div class="rule-name">${r.rule}</div>
-          <div class="rule-desc">${r.description || ""}</div>
-          <div class="rule-value">${r.value || ""}</div>
+          <div class="rule-name" id="rule-${i}-name">${r.rule}</div>
+          <div class="rule-desc" id="rule-${i}-desc">${r.description || ""}</div>
+          <div class="rule-value" id="rule-${i}-value">${r.value || ""}</div>
           <div class="rule-pills">${longPill}${shortPill}</div>
           <div class="rule-strength-bar">
-            <div class="rule-strength-fill" style="width:${strengthPct}%;background:${strengthColor}"></div>
+            <div class="rule-strength-fill" id="rule-${i}-strength" style="width:${strengthPct}%;background:${strengthColor}"></div>
           </div>
         </div>
       </div>`;
   }).join("");
 
-  // History HTML
   const historyHtml = window._history && window._history.length
     ? window._history.slice(0, 10).map(h => `
         <div class="history-row">
@@ -1182,30 +1243,41 @@ function renderDashboard(data) {
         </div>`).join("")
     : `<div class="no-signals">No signals fired yet.<br>Signals appear here when all 5 rules pass.</div>`;
 
-  const formingBanner = data.forming
-    ? `<div class="forming-banner">${data.symbol}: ${data.forming_direction || '—'} signal forming — ${
+  const formingDisplay = data.forming ? "block" : "none";
+  const formingText = data.forming
+    ? `${data.symbol}: ${data.forming_direction || '—'} signal forming — ${
         data.forming_direction === 'LONG' ? data.long_rules_met : data.short_rules_met
-      }/${data.total_rules} rules passing</div>`
+      }/${data.total_rules} rules passing`
     : '';
 
-  document.getElementById("content").innerHTML = `
-    ${formingBanner}
+  return `
+    <div class="forming-banner" id="live-forming-banner" style="display:${formingDisplay}">${formingText}</div>
     <div class="main-grid">
 
       <!-- Left Column -->
       <div>
+        <!-- Chart Timeframe Selector -->
+        <div class="chart-tf-bar" id="chart-tf-bar">
+          <button class="chart-tf-btn ${activeTimeframe === '15m' ? 'active' : ''}" onclick="switchTimeframe('15m')">15m</button>
+          <button class="chart-tf-btn ${activeTimeframe === '1h' ? 'active' : ''}" onclick="switchTimeframe('1h')">1h</button>
+          <button class="chart-tf-btn ${activeTimeframe === '4h' ? 'active' : ''}" onclick="switchTimeframe('4h')">4h</button>
+        </div>
+
+        <!-- Chart Container -->
+        <div id="chart-container" style="height:350px;border-radius:10px;overflow:hidden;margin-bottom:20px;border:1px solid var(--border)"></div>
+
         <!-- Signal Card -->
         <div class="signal-card">
-          <div class="signal-label">${data.symbol} · ${data.timestamp_display}</div>
-          <div class="signal-badge ${sigClass}">${data.signal}</div>
-          <div class="signal-price"><span>Price</span>${priceDisplay}</div>
-          <div class="signal-meta">
+          <div class="signal-label" id="live-signal-label">${data.symbol} · ${data.timestamp_display}</div>
+          <div class="signal-badge ${data.signal}" id="live-signal-badge">${data.signal}</div>
+          <div class="signal-price" id="live-price"><span>Price</span>${priceDisplay}</div>
+          <div class="signal-meta" id="live-rules-met">
             ${data.long_rules_met}/${data.total_rules} long rules  ·
             ${data.short_rules_met}/${data.total_rules} short rules
           </div>
-          <div class="progress-label">Confidence: ${confScore.toFixed(1)}% ${confLabel}</div>
+          <div class="progress-label" id="live-confidence">Confidence: ${confScore.toFixed(1)}% ${confLabel}</div>
           <div class="progress-bar-wrap">
-            <div class="progress-bar-fill ${confFill}" style="width:${confScore}%"></div>
+            <div class="progress-bar-fill ${confFill}" id="live-confidence-bar" style="width:${confScore}%"></div>
           </div>
         </div>
 
@@ -1280,12 +1352,14 @@ function renderDashboard(data) {
         </div>
 
         <!-- Signal History -->
-        <div class="panel">
+        <div class="panel" id="history-panel">
           <div class="panel-header">
             <span>🔔 Signal History</span>
-            <span style="color:var(--blue)">${window._history ? window._history.length : 0} fired</span>
+            <span style="color:var(--blue)" id="live-history-count">${window._history ? window._history.length : 0} fired</span>
           </div>
-          ${historyHtml}
+          <div id="live-history-body">
+            ${historyHtml}
+          </div>
         </div>
 
         <!-- Trading Guide (Collapsible) -->
@@ -1361,11 +1435,223 @@ function renderDashboard(data) {
       <div class="journal-tab-content" id="journal-closed"></div>
       <div class="journal-tab-content" id="journal-stats"></div>
     </div>`;
+}
 
-  checkAndNotify(data);
-  fetchTradeSetup(data.symbol, data.signal);
-  attachSettingsListeners();
-  fetchJournal();
+function updateDashboardValues(data) {
+  const confScore = data.confidence_score != null ? data.confidence_score : 0;
+  const confLabel = data.confidence_label || "";
+  const confFill = getConfFill(data.confidence_color);
+  const priceDisplay = formatPrice(data.current_price);
+
+  // Signal badge
+  const badge = document.getElementById("live-signal-badge");
+  if (badge) {
+    badge.textContent = data.signal;
+    badge.className = "signal-badge " + data.signal;
+  }
+
+  // Signal label
+  const label = document.getElementById("live-signal-label");
+  if (label) label.textContent = data.symbol + " · " + data.timestamp_display;
+
+  // Price
+  const priceEl = document.getElementById("live-price");
+  if (priceEl) priceEl.innerHTML = "<span>Price</span>" + priceDisplay;
+
+  // Rules met
+  const rulesMetEl = document.getElementById("live-rules-met");
+  if (rulesMetEl) {
+    rulesMetEl.textContent = data.long_rules_met + "/" + data.total_rules + " long rules  ·  " +
+      data.short_rules_met + "/" + data.total_rules + " short rules";
+  }
+
+  // Confidence text
+  const confEl = document.getElementById("live-confidence");
+  if (confEl) confEl.textContent = "Confidence: " + confScore.toFixed(1) + "% " + confLabel;
+
+  // Confidence bar
+  const confBar = document.getElementById("live-confidence-bar");
+  if (confBar) {
+    confBar.style.width = confScore + "%";
+    confBar.className = "progress-bar-fill " + confFill;
+  }
+
+  // Forming banner
+  const banner = document.getElementById("live-forming-banner");
+  if (banner) {
+    if (data.forming) {
+      banner.style.display = "block";
+      const dir = data.forming_direction || '—';
+      const rulesMet = dir === 'LONG' ? data.long_rules_met : data.short_rules_met;
+      banner.textContent = data.symbol + ": " + dir + " signal forming — " + rulesMet + "/" + data.total_rules + " rules passing";
+    } else {
+      banner.style.display = "none";
+    }
+  }
+
+  // Update rules
+  if (data.rules) {
+    data.rules.forEach((r, i) => {
+      const iconEl = document.getElementById("rule-" + i + "-icon");
+      if (iconEl) iconEl.textContent = getRuleIcon(r);
+
+      const nameEl = document.getElementById("rule-" + i + "-name");
+      if (nameEl) nameEl.textContent = r.rule;
+
+      const descEl = document.getElementById("rule-" + i + "-desc");
+      if (descEl) descEl.textContent = r.description || "";
+
+      const valEl = document.getElementById("rule-" + i + "-value");
+      if (valEl) valEl.textContent = r.value || "";
+
+      const longPill = document.getElementById("rule-" + i + "-long-pill");
+      if (longPill) {
+        longPill.className = "pill " + (r.long ? "pill-pass-long" : "pill-fail-long");
+        longPill.textContent = r.long ? "✓ LONG" : "✗ LONG";
+      }
+
+      const shortPill = document.getElementById("rule-" + i + "-short-pill");
+      if (shortPill) {
+        shortPill.className = "pill " + (r.short ? "pill-pass-short" : "pill-fail-short");
+        shortPill.textContent = r.short ? "✓ SHORT" : "✗ SHORT";
+      }
+
+      const strengthEl = document.getElementById("rule-" + i + "-strength");
+      if (strengthEl) {
+        const strength = r.strength != null ? r.strength : 0;
+        const strengthPct = Math.round(strength * 100);
+        const strengthColor = strength > 0.7 ? 'var(--green)' : strength > 0.4 ? 'var(--yellow)' : 'var(--muted)';
+        strengthEl.style.width = strengthPct + "%";
+        strengthEl.style.background = strengthColor;
+      }
+    });
+  }
+
+  // Update history panel
+  const histCountEl = document.getElementById("live-history-count");
+  if (histCountEl) histCountEl.textContent = (window._history ? window._history.length : 0) + " fired";
+
+  const histBody = document.getElementById("live-history-body");
+  if (histBody) {
+    if (window._history && window._history.length) {
+      histBody.innerHTML = window._history.slice(0, 10).map(h => `
+        <div class="history-row">
+          <div>
+            <div class="hist-sym">${h.symbol.replace("/USDT","")}</div>
+            <div class="hist-time">${h.timestamp}</div>
+          </div>
+          <div style="text-align:right">
+            <div><span class="sig-chip ${h.signal}">${h.signal}</span></div>
+            <div class="hist-price">${h.price ? "$" + Number(h.price).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:6}) : "—"}</div>
+          </div>
+        </div>`).join("");
+    }
+  }
+
+  // Update chart with latest candle (non-destructive)
+  refreshChartLatest();
+}
+
+// ── Chart (TradingView Lightweight Charts) ─────────────────────────────────
+async function loadChart(symbol) {
+  const container = document.getElementById("chart-container");
+  if (!container) return;
+
+  // Remove old chart if exists
+  if (chartInstance) {
+    chartInstance.remove();
+    chartInstance = null;
+    candleSeries = null;
+    ema9Series = null;
+    ema21Series = null;
+  }
+
+  chartInstance = LightweightCharts.createChart(container, {
+    layout: { background: { color: '#161b22' }, textColor: '#8b949e' },
+    grid: { vertLines: { color: '#21262d' }, horzLines: { color: '#21262d' } },
+    timeScale: { timeVisible: true, secondsVisible: false },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    width: container.clientWidth,
+    height: 350,
+  });
+
+  candleSeries = chartInstance.addCandlestickSeries({
+    upColor: '#3fb950',
+    downColor: '#f85149',
+    borderUpColor: '#3fb950',
+    borderDownColor: '#f85149',
+    wickUpColor: '#3fb950',
+    wickDownColor: '#f85149',
+  });
+
+  ema9Series = chartInstance.addLineSeries({
+    color: '#58a6ff',
+    lineWidth: 1,
+    priceLineVisible: false,
+    lastValueVisible: false,
+  });
+
+  ema21Series = chartInstance.addLineSeries({
+    color: '#d29922',
+    lineWidth: 1,
+    priceLineVisible: false,
+    lastValueVisible: false,
+  });
+
+  await fetchChartData(symbol, activeTimeframe);
+
+  // Handle resize
+  const resizeObserver = new ResizeObserver(() => {
+    if (chartInstance && container) {
+      chartInstance.applyOptions({ width: container.clientWidth });
+    }
+  });
+  resizeObserver.observe(container);
+}
+
+async function fetchChartData(symbol, timeframe) {
+  try {
+    const res = await fetch(`/api/chart-data?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}&limit=100`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.error) return;
+
+    if (candleSeries && data.candles) candleSeries.setData(data.candles);
+    if (ema9Series && data.ema9) ema9Series.setData(data.ema9);
+    if (ema21Series && data.ema21) ema21Series.setData(data.ema21);
+    if (chartInstance) chartInstance.timeScale().fitContent();
+  } catch (e) {}
+}
+
+async function refreshChartLatest() {
+  if (!chartInstance || !candleSeries) return;
+  try {
+    const res = await fetch(`/api/chart-data?symbol=${encodeURIComponent(activeSymbol)}&timeframe=${activeTimeframe}&limit=2`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.error) return;
+
+    if (data.candles && data.candles.length > 0) {
+      const lastCandle = data.candles[data.candles.length - 1];
+      candleSeries.update(lastCandle);
+    }
+    if (data.ema9 && data.ema9.length > 0) {
+      ema9Series.update(data.ema9[data.ema9.length - 1]);
+    }
+    if (data.ema21 && data.ema21.length > 0) {
+      ema21Series.update(data.ema21[data.ema21.length - 1]);
+    }
+  } catch (e) {}
+}
+
+function switchTimeframe(tf) {
+  activeTimeframe = tf;
+  // Update button states
+  document.querySelectorAll('.chart-tf-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent.trim() === tf);
+  });
+  // Reload chart data with new timeframe
+  fetchChartData(activeSymbol, tf);
 }
 
 // ── Trade Setup ────────────────────────────────────────────────────────────
@@ -1861,6 +2147,19 @@ def api_history():
 @app.route("/api/symbols")
 def api_symbols():
     return jsonify(SYMBOLS)
+
+
+@app.route("/api/chart-data")
+def api_chart_data():
+    symbol = request.args.get("symbol", SYMBOLS[0])
+    if symbol not in SYMBOLS:
+        return jsonify({"error": "Unknown symbol"}), 400
+    timeframe = request.args.get("timeframe", "15m")
+    limit = min(int(request.args.get("limit", 100)), 300)
+    data = get_chart_data(symbol, timeframe, limit)
+    if data is None:
+        return jsonify({"error": "Chart data unavailable"}), 500
+    return jsonify(data)
 
 
 @app.route("/api/trade-setup")

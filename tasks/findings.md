@@ -103,5 +103,25 @@ Signal:    2026-03-19 14:30 UTC
 ===================
 ```
 
+## Phase 2 Additions (2026-03-19)
+
+### ATR-Based TP/SL (replaces fixed %)
+- SL = 1.5x ATR(14) from entry (adapts to volatility)
+- TP1 = 1:1 R:R, TP2 = 1:2 R:R, TP3 = 1:3 R:R
+- Rationale: fixed % ignores volatility. ATR is professional standard
+
+### Live Chart (TradingView Lightweight Charts)
+- CDN: lightweight-charts v4 from unpkg
+- Candlestick chart with EMA9/EMA21 overlays
+- Signal markers (BUY/SELL arrows on chart)
+- New `/api/chart-data` endpoint returning OHLCV + indicators
+- Placed above signal card in left column
+
+### SPA-like UX (no page reload)
+- Stop replacing innerHTML on every refresh
+- Render layout ONCE on first load, then update individual DOM elements
+- Chart updates by appending new candles, not re-creating
+- Smooth transitions on value changes
+
 ## Open Questions
-- None — user said "whatever you want, just build all of it"
+- None

@@ -263,42 +263,40 @@ def calculate_trade_setup(analysis: dict, account_balance: float = 1000.0,
     direction = "LONG" if analysis["signal"] == "BUY" else "SHORT"
     symbol = analysis["symbol"]
 
-    # Stop Loss: use recent swing low/high from 15M data, fallback to 1.5%
-    sl_pct = 0.015  # default 1.5%
+    # ATR-based Stop Loss (adapts to volatility)
+    atr_multiplier = 1.5
+    sl_distance_abs = entry * 0.015  # fallback 1.5%
     try:
         df = fetch_ohlcv(symbol, "15m", 30)
-        if df is not None and len(df) >= 10:
-            recent = df.iloc[-10:]
-            if direction == "LONG":
-                swing_low = float(recent["low"].min())
-                if swing_low < entry:
-                    sl_pct = (entry - swing_low) / entry
-            else:
-                swing_high = float(recent["high"].max())
-                if swing_high > entry:
-                    sl_pct = (swing_high - entry) / entry
+        if df is not None and len(df) >= 15:
+            atr = ta.atr(df["high"], df["low"], df["close"], length=14)
+            atr_val = float(atr.iloc[-1])
+            if atr_val > 0:
+                sl_distance_abs = atr_val * atr_multiplier
     except Exception:
         pass
 
-    sl_pct = max(sl_pct, 0.005)  # minimum 0.5% SL distance
-    sl_pct = min(sl_pct, 0.05)   # maximum 5% SL distance
+    # Clamp SL between 0.5% and 5% of entry
+    sl_distance_abs = max(sl_distance_abs, entry * 0.005)
+    sl_distance_abs = min(sl_distance_abs, entry * 0.05)
+    sl_pct = sl_distance_abs / entry
 
     if direction == "LONG":
-        stop_loss = entry * (1 - sl_pct)
-        tp1 = entry * 1.02
-        tp2 = entry * 1.05
-        tp3 = entry * 1.08
+        stop_loss = entry - sl_distance_abs
+        tp1 = entry + sl_distance_abs * 1  # 1:1 R:R
+        tp2 = entry + sl_distance_abs * 2  # 1:2 R:R
+        tp3 = entry + sl_distance_abs * 3  # 1:3 R:R
     else:
-        stop_loss = entry * (1 + sl_pct)
-        tp1 = entry * 0.98
-        tp2 = entry * 0.95
-        tp3 = entry * 0.92
+        stop_loss = entry + sl_distance_abs
+        tp1 = entry - sl_distance_abs * 1  # 1:1 R:R
+        tp2 = entry - sl_distance_abs * 2  # 1:2 R:R
+        tp3 = entry - sl_distance_abs * 3  # 1:3 R:R
 
-    # Risk/reward ratios
-    sl_distance = abs(entry - stop_loss)
-    rr1 = round(abs(tp1 - entry) / sl_distance, 2) if sl_distance > 0 else 0
-    rr2 = round(abs(tp2 - entry) / sl_distance, 2) if sl_distance > 0 else 0
-    rr3 = round(abs(tp3 - entry) / sl_distance, 2) if sl_distance > 0 else 0
+    # R:R ratios are fixed by design: 1:1, 1:2, 1:3
+    rr1, rr2, rr3 = 1.0, 2.0, 3.0
+    tp1_pct = round(sl_pct * 1 * 100, 2)
+    tp2_pct = round(sl_pct * 2 * 100, 2)
+    tp3_pct = round(sl_pct * 3 * 100, 2)
 
     # Position sizing based on risk
     risk_amount = account_balance * risk_pct
@@ -317,9 +315,9 @@ def calculate_trade_setup(analysis: dict, account_balance: float = 1000.0,
         "tp1": round(tp1, 6),
         "tp2": round(tp2, 6),
         "tp3": round(tp3, 6),
-        "tp1_pct": 2.0,
-        "tp2_pct": 5.0,
-        "tp3_pct": 8.0,
+        "tp1_pct": tp1_pct,
+        "tp2_pct": tp2_pct,
+        "tp3_pct": tp3_pct,
         "rr1": rr1,
         "rr2": rr2,
         "rr3": rr3,
@@ -333,6 +331,35 @@ def calculate_trade_setup(analysis: dict, account_balance: float = 1000.0,
         "confidence_label": analysis["confidence_label"],
         "timestamp": analysis["timestamp_display"],
     }
+
+
+def get_chart_data(symbol: str, timeframe: str = "15m", limit: int = 100) -> dict | None:
+    """Return OHLCV + EMA9/EMA21 for charting."""
+    df = fetch_ohlcv(symbol, timeframe, limit)
+    if df is None or len(df) < 25:
+        return None
+
+    df["ema9"] = ta.ema(df["close"], length=9)
+    df["ema21"] = ta.ema(df["close"], length=21)
+
+    candles = []
+    ema9_data = []
+    ema21_data = []
+    for _, row in df.iterrows():
+        t = int(row["timestamp"].timestamp())
+        candles.append({
+            "time": t,
+            "open": float(row["open"]),
+            "high": float(row["high"]),
+            "low": float(row["low"]),
+            "close": float(row["close"]),
+        })
+        if pd.notna(row["ema9"]):
+            ema9_data.append({"time": t, "value": float(row["ema9"])})
+        if pd.notna(row["ema21"]):
+            ema21_data.append({"time": t, "value": float(row["ema21"])})
+
+    return {"candles": candles, "ema9": ema9_data, "ema21": ema21_data}
 
 
 def analyze(symbol: str) -> dict:
