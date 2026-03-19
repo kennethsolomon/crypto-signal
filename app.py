@@ -2523,13 +2523,19 @@ def api_symbols():
     return jsonify(SYMBOLS)
 
 
+ALLOWED_TIMEFRAMES = {"1m", "5m", "15m", "1h", "4h", "1d"}
+
+
 @app.route("/api/chart-data")
 def api_chart_data():
     symbol = request.args.get("symbol", SYMBOLS[0])
     if symbol not in SYMBOLS:
         return jsonify({"error": "Unknown symbol"}), 400
     timeframe = request.args.get("timeframe", "15m")
-    limit = min(int(request.args.get("limit", 100)), 300)
+    if timeframe not in ALLOWED_TIMEFRAMES:
+        return jsonify({"error": "Invalid timeframe"}), 400
+    limit = request.args.get("limit", 100, type=int) or 100
+    limit = min(limit, 300)
     data = get_chart_data(symbol, timeframe, limit)
     if data is None:
         return jsonify({"error": "Chart data unavailable"}), 500
@@ -2542,9 +2548,15 @@ def api_trade_setup():
     if symbol not in SYMBOLS:
         return jsonify({"error": "Unknown symbol"}), 400
     settings = load_settings()
-    balance = float(request.args.get("balance", settings["account_balance"]))
-    risk_pct = float(request.args.get("risk_pct", settings["risk_pct"]))
-    max_lev = int(request.args.get("max_leverage", settings["max_leverage"]))
+    try:
+        balance = float(request.args.get("balance", settings["account_balance"]))
+        risk_pct = float(request.args.get("risk_pct", settings["risk_pct"]))
+        max_lev = int(request.args.get("max_leverage", settings["max_leverage"]))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid parameter value"}), 400
+    balance = max(balance, 1.0)
+    risk_pct = max(0.001, min(risk_pct, 0.10))
+    max_lev = max(1, min(max_lev, 20))
     analysis = get_cached_analysis(symbol)
     setup = calculate_trade_setup(analysis, balance, risk_pct, max_lev)
     if setup is None:
@@ -2560,13 +2572,18 @@ def api_get_settings():
 @app.route("/api/settings", methods=["POST"])
 def api_save_settings():
     data = request.get_json(force=True)
+    if data is None:
+        return jsonify({"error": "Invalid JSON"}), 400
     settings = load_settings()
-    if "account_balance" in data:
-        settings["account_balance"] = float(data["account_balance"])
-    if "risk_pct" in data:
-        settings["risk_pct"] = float(data["risk_pct"])
-    if "max_leverage" in data:
-        settings["max_leverage"] = int(data["max_leverage"])
+    try:
+        if "account_balance" in data:
+            settings["account_balance"] = max(float(data["account_balance"]), 1.0)
+        if "risk_pct" in data:
+            settings["risk_pct"] = max(0.001, min(float(data["risk_pct"]), 0.10))
+        if "max_leverage" in data:
+            settings["max_leverage"] = max(1, min(int(data["max_leverage"]), 20))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid setting value"}), 400
     save_settings(settings)
     return jsonify(settings)
 
@@ -2586,8 +2603,9 @@ def api_get_trades():
 @app.route("/api/trades", methods=["POST"])
 def api_create_trade():
     data = request.get_json(force=True)
-    with trades_lock:
-        trades = load_trades()
+    if data is None:
+        return jsonify({"error": "Invalid JSON"}), 400
+    try:
         trade = {
             "id": int(time.time() * 1000),
             "symbol": data.get("symbol", ""),
@@ -2612,6 +2630,10 @@ def api_create_trade():
             "closed_at": None,
             "notes": data.get("notes", ""),
         }
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid trade data"}), 400
+    with trades_lock:
+        trades = load_trades()
         trades.insert(0, trade)
         save_trades(trades)
     return jsonify(trade), 201
@@ -2620,6 +2642,8 @@ def api_create_trade():
 @app.route("/api/trades/<int:trade_id>", methods=["PUT"])
 def api_update_trade(trade_id):
     data = request.get_json(force=True)
+    if data is None:
+        return jsonify({"error": "Invalid JSON"}), 400
     with trades_lock:
         trades = load_trades()
         trade = next((t for t in trades if t["id"] == trade_id), None)
@@ -2627,7 +2651,10 @@ def api_update_trade(trade_id):
             return jsonify({"error": "Trade not found"}), 404
 
         if "exit_price" in data and data["exit_price"] is not None:
-            exit_price = float(data["exit_price"])
+            try:
+                exit_price = float(data["exit_price"])
+            except (ValueError, TypeError):
+                return jsonify({"error": "Invalid exit_price"}), 400
             trade["exit_price"] = exit_price
             trade["exit_reason"] = data.get("exit_reason", "manual")
             trade["status"] = "closed"
@@ -2716,4 +2743,4 @@ if __name__ == "__main__":
     print("  Connecting to ByBit (free, no API key needed)")
     print("  Open: http://localhost:5001")
     print("=" * 55 + "\n")
-    app.run(debug=False, host="0.0.0.0", port=5001)
+    app.run(debug=False, host="127.0.0.1", port=5001)
