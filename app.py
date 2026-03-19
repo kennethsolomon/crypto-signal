@@ -1164,7 +1164,7 @@ let allData = {};
 let countdownVal = 60;
 let countdownTimer = null;
 let refreshMode = 'polling'; // 'polling' (60s) or 'realtime' (10s)
-let soundEnabled = false;
+let soundEnabled = localStorage.getItem('soundEnabled') === 'true';
 let lastNotifiedState = {}; // { symbol: { signal, forming } }
 let isFirstRender = true;
 let chartInstance = null;
@@ -1193,6 +1193,11 @@ function playBeep() {
 
 function toggleSound() {
   soundEnabled = !soundEnabled;
+  localStorage.setItem('soundEnabled', soundEnabled);
+  updateSoundBtn();
+}
+
+function updateSoundBtn() {
   const btn = document.getElementById('sound-toggle');
   if (btn) {
     btn.textContent = soundEnabled ? '🔊' : '🔇';
@@ -2440,6 +2445,7 @@ async function fetchHistory() {
 // ── Init ───────────────────────────────────────────────────────────────────
 (async () => {
   renderTabs();
+  updateSoundBtn();
   await Promise.all([fetchHistory(), loadSettings()]);
   await loadSymbol(activeSymbol);
   await loadAllSymbols();  // load rest for tab badges
