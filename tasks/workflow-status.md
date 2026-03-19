@@ -5,17 +5,17 @@
 
 | # | Step | Status | Notes |
 |---|------|--------|-------|
-| 1 | Read Todo | >> next << | |
-| 2 | Read Lessons | not yet | |
-| 3 | Explore (`/sk:brainstorm`) | not yet | |
-| 4 | Design (`/sk:frontend-design` or `/sk:api-design`) | not yet | optional |
-| 5 | Accessibility (`/sk:accessibility`) | not yet | optional |
-| 6 | Plan (`/sk:write-plan`) | not yet | |
-| 7 | Branch (`/sk:branch`) | not yet | |
-| 8 | Migrate (`/sk:schema-migrate`) | not yet | optional |
-| 9 | Write Tests (`/sk:write-tests`) | not yet | |
-| 10 | Implement (`/sk:execute-plan`) | not yet | |
-| 11 | Commit (`/sk:smart-commit`) | not yet | |
+| 1 | Read Todo | done | All prior tasks complete. New task: signal rule upgrade |
+| 2 | Read Lessons | done | No active lessons |
+| 3 | Explore (`/sk:brainstorm`) | done | Option B chosen: patch Rules 3+5, add StochRSI + Funding Rate filter, 5/6 threshold |
+| 4 | Design (`/sk:frontend-design` or `/sk:api-design`) | skipped | backend-only, no new API surface |
+| 5 | Accessibility (`/sk:accessibility`) | skipped | backend-only, no UI added |
+| 6 | Plan (`/sk:write-plan`) | done | 3-wave plan: Wave 1 backend rules, Wave 2 analyze(), Wave 3 frontend |
+| 7 | Branch (`/sk:branch`) | done | feature/signal-rule-upgrade-state-based |
+| 8 | Migrate (`/sk:schema-migrate`) | skipped | no schema changes |
+| 9 | Write Tests (`/sk:write-tests`) | done | 54 tests written, 47 failing (RED) — tests/test_analyzer.py |
+| 10 | Implement (`/sk:execute-plan`) | done | All 3 waves complete: analyzer.py (rules 3,5,6 + funding + analyze), app.py (frontend) |
+| 11 | Commit (`/sk:smart-commit`) | not yet | >> next << |
 | 12 | **Lint + Dep Audit** (`/sk:lint`) | not yet | HARD GATE — loop until clean |
 | 13 | Commit (`/sk:smart-commit`) | not yet | conditional |
 | 14 | **Verify Tests** (`/sk:test`) | not yet | HARD GATE — 100% coverage |

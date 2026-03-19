@@ -34,6 +34,31 @@ CONFIG = {
 }
 
 
+FUNDING_EXTREME_THRESHOLD = 0.0005  # 0.05% — blocks signal on that side
+
+
+def fetch_funding_rate(symbol: str) -> dict:
+    """
+    Fetch ByBit perpetual funding rate for a symbol.
+    Returns extreme=True + blocked_side when rate is dangerously skewed.
+    Extreme positive (>= +0.05%): market is overloaded with longs → block longs.
+    Extreme negative (<= -0.05%): market is overloaded with shorts → block shorts.
+    """
+    try:
+        # ByBit funding rate requires the perpetual contract symbol format (e.g. BTC/USDT:USDT)
+        perp_symbol = symbol.replace("/USDT", "/USDT:USDT") if ":USDT" not in symbol else symbol
+        data = exchange.fetch_funding_rate(perp_symbol)
+        rate = float(data["fundingRate"])
+        if rate >= FUNDING_EXTREME_THRESHOLD:
+            return {"rate": rate, "extreme": True, "blocked_side": "LONG"}
+        if rate <= -FUNDING_EXTREME_THRESHOLD:
+            return {"rate": rate, "extreme": True, "blocked_side": "SHORT"}
+        return {"rate": rate, "extreme": False, "blocked_side": None}
+    except Exception as e:
+        print(f"[WARN] fetch_funding_rate({symbol}): {e}")
+        return {"rate": None, "extreme": False, "blocked_side": None}
+
+
 def fetch_ohlcv(symbol: str, timeframe: str, limit: int = 250) -> pd.DataFrame | None:
     """Fetch OHLCV candles from ByBit. Returns None on failure."""
     try:
@@ -126,56 +151,51 @@ def check_rule_2_rsi(symbol: str) -> dict:
 
 def check_rule_3_macd(symbol: str) -> dict:
     """
-    Rule 3: MACD Crossover
+    Rule 3: MACD Histogram State
     Timeframe: 1H
-    Logic: LONG if MACD crossed above signal in last 3 candles
-           SHORT if MACD crossed below signal in last 3 candles
+    Logic: LONG if histogram is positive AND growing over last 3 candles
+           SHORT if histogram is negative AND falling over last 3 candles
+    State-based — persists during trends rather than requiring a rare crossover event.
     """
     df = fetch_ohlcv(symbol, "1h", 100)
     if df is None or len(df) < 30:
-        return {"rule": "MACD Crossover (1H)", "long": False, "short": False,
-                "value": "Data unavailable", "error": True}
+        return {"rule": "MACD Histogram (1H)", "long": False, "short": False,
+                "value": "Data unavailable", "description": "Momentum building in signal direction",
+                "signal_hint": "LONG: histogram positive & growing | SHORT: histogram negative & falling",
+                "strength": 0.0, "error": True}
 
     macd_data = ta.macd(df["close"],
                         fast=CONFIG["macd_fast"],
                         slow=CONFIG["macd_slow"],
                         signal=CONFIG["macd_signal"])
-    df["macd"] = macd_data[f"MACD_{CONFIG['macd_fast']}_{CONFIG['macd_slow']}_{CONFIG['macd_signal']}"]
-    df["sig"] = macd_data[f"MACDs_{CONFIG['macd_fast']}_{CONFIG['macd_slow']}_{CONFIG['macd_signal']}"]
+    hist_col = f"MACDh_{CONFIG['macd_fast']}_{CONFIG['macd_slow']}_{CONFIG['macd_signal']}"
+    df["histogram"] = macd_data[hist_col]
 
-    macd_long = False
-    macd_short = False
-    long_strength = 0.0
-    short_strength = 0.0
-    lookback = CONFIG["macd_lookback"]
-    freshness_scores = [1.0, 0.66, 0.33]
+    h1 = float(df["histogram"].iloc[-1])
+    h2 = float(df["histogram"].iloc[-2])
+    h3 = float(df["histogram"].iloc[-3])
 
-    for idx, i in enumerate(range(-1, -lookback - 1, -1)):
-        cur_macd = df["macd"].iloc[i]
-        cur_sig = df["sig"].iloc[i]
-        prev_macd = df["macd"].iloc[i - 1]
-        prev_sig = df["sig"].iloc[i - 1]
-        if cur_macd > cur_sig and prev_macd <= prev_sig:
-            macd_long = True
-            long_strength = max(long_strength, freshness_scores[idx])
-        if cur_macd < cur_sig and prev_macd >= prev_sig:
-            macd_short = True
-            short_strength = max(short_strength, freshness_scores[idx])
+    # All 3 must be positive AND growing — momentum already established, not just crossing zero
+    long_pass  = h1 > 0 and h2 > 0 and h3 > 0 and h1 > h2 > h3
+    # All 3 must be negative AND falling (more negative) — selling pressure building
+    short_pass = h1 < 0 and h2 < 0 and h3 < 0 and h1 < h2 < h3
 
-    strength = max(long_strength, short_strength)
+    if long_pass or short_pass:
+        price = float(df["close"].iloc[-1])
+        strength = min(abs(h1) / (price * 0.001), 1.0) if price > 0 else 0.0
+    else:
+        strength = 0.0
 
-    cur_macd_val = df["macd"].iloc[-1]
-    cur_sig_val = df["sig"].iloc[-1]
-    above = "MACD above Signal" if cur_macd_val > cur_sig_val else "MACD below Signal"
+    trend = "↑ Growing" if h1 > h2 else "↓ Shrinking"
 
     return {
-        "rule": "MACD Crossover (1H)",
-        "description": "Momentum shift confirmation via crossover",
-        "long": macd_long,
-        "short": macd_short,
+        "rule": "MACD Histogram (1H)",
+        "description": "Momentum building in signal direction",
+        "long": long_pass,
+        "short": short_pass,
         "strength": round(float(strength), 3),
-        "value": f"MACD: {cur_macd_val:.4f}  |  Signal: {cur_sig_val:.4f}  |  {above}",
-        "signal_hint": f"Crossover within last {lookback} candles",
+        "value": f"Histogram: {h1:.4f}  |  Prev: {h2:.4f}  |  {trend}",
+        "signal_hint": "LONG: histogram positive & growing | SHORT: histogram negative & falling",
         "error": False,
     }
 
@@ -222,30 +242,117 @@ def check_rule_4_ema_stack(symbol: str) -> dict:
 
 def check_rule_5_volume(symbol: str) -> dict:
     """
-    Rule 5: Volume Surge
+    Rule 5: OBV Trend
     Timeframe: 15M
-    Logic: Current candle volume > 1.2× the 20-period average
+    Logic: On Balance Volume slope positive over 5 candles = net buyers (LONG)
+           OBV slope negative over 5 candles = net sellers (SHORT)
+    State-based — directional volume pressure rather than single-candle spike.
     """
     df = fetch_ohlcv(symbol, "15m", 60)
-    if df is None or len(df) < 22:
-        return {"rule": "Volume Surge (15M 1.2×)", "long": False, "short": False,
-                "value": "Data unavailable", "error": True}
+    if df is None or len(df) < 10:
+        return {"rule": "OBV Trend (15M)", "long": False, "short": False,
+                "value": "Data unavailable", "description": "Net buying/selling pressure over 5 candles",
+                "signal_hint": "LONG: OBV rising (net buyers) | SHORT: OBV falling (net sellers)",
+                "strength": 0.0, "error": True}
 
-    avg_vol = df["volume"].iloc[-CONFIG["volume_avg_period"] - 1:-1].mean()
-    cur_vol = df["volume"].iloc[-1]
-    ratio = cur_vol / avg_vol if avg_vol > 0 else 0
+    # Compute OBV manually
+    obv = [0.0]
+    for i in range(1, len(df)):
+        if df["close"].iloc[i] > df["close"].iloc[i - 1]:
+            obv.append(obv[-1] + float(df["volume"].iloc[i]))
+        elif df["close"].iloc[i] < df["close"].iloc[i - 1]:
+            obv.append(obv[-1] - float(df["volume"].iloc[i]))
+        else:
+            obv.append(obv[-1])
 
-    surge = ratio >= CONFIG["volume_multiplier"]
-    strength = min((float(ratio) - 1.0) / 1.0, 1.0) if ratio > 1.0 else 0.0
+    # Slope over last 5 candles
+    slope = (obv[-1] - obv[-5]) / 5
+
+    long_pass = slope > 0
+    short_pass = slope < 0
+
+    avg_vol = float(df["volume"].iloc[-20:].mean()) if len(df) >= 20 else float(df["volume"].mean())
+    strength = min(abs(slope) / avg_vol, 1.0) if avg_vol > 0 else 0.0
+
+    direction = "↑ Rising" if slope > 0 else ("↓ Falling" if slope < 0 else "→ Flat")
 
     return {
-        "rule": "Volume Surge (15M 1.2×)",
-        "description": "Real buying/selling pressure backing the move",
-        "long": surge,
-        "short": surge,
+        "rule": "OBV Trend (15M)",
+        "description": "Net buying/selling pressure over 5 candles",
+        "long": long_pass,
+        "short": short_pass,
         "strength": round(float(strength), 3),
-        "value": f"Volume: {cur_vol:,.0f}  |  Avg: {avg_vol:,.0f}  |  Ratio: {ratio:.2f}×",
-        "signal_hint": f"Current volume must be ≥ {CONFIG['volume_multiplier']}× the {CONFIG['volume_avg_period']}-candle average",
+        "value": f"OBV: {obv[-1]:,.0f}  |  Slope: {slope:+,.0f}/candle  |  {direction}",
+        "signal_hint": "LONG: OBV rising (net buyers) | SHORT: OBV falling (net sellers)",
+        "error": False,
+    }
+
+
+def check_rule_6_stoch_rsi(symbol: str) -> dict:
+    """
+    Rule 6: Stochastic RSI Entry Timing
+    Timeframe: 1H
+    Logic: LONG if K < 50 and K crosses up over D (oversold bounce in uptrend)
+           SHORT if K > 50 and K crosses down below D (overbought pullback in downtrend)
+    Catches dips within trends — prevents entering at the top of a move.
+    """
+    df = fetch_ohlcv(symbol, "1h", 60)
+    if df is None or len(df) < 20:
+        return {"rule": "Stochastic RSI (1H)", "long": False, "short": False,
+                "value": "Data unavailable", "description": "Entry timing — buy dips, not tops",
+                "signal_hint": "LONG: K<50 crossing up | SHORT: K>50 crossing down",
+                "strength": 0.0, "error": True}
+
+    stoch = ta.stochrsi(df["close"], length=14, rsi_length=14, k=3, d=3)
+    if stoch is None or stoch.empty:
+        return {"rule": "Stochastic RSI (1H)", "long": False, "short": False,
+                "value": "Indicator unavailable", "description": "Entry timing — buy dips, not tops",
+                "signal_hint": "LONG: K<50 crossing up | SHORT: K>50 crossing down",
+                "strength": 0.0, "error": True}
+
+    k_col = "STOCHRSIk_14_14_3_3"
+    d_col = "STOCHRSId_14_14_3_3"
+
+    if k_col not in stoch.columns or d_col not in stoch.columns:
+        return {"rule": "Stochastic RSI (1H)", "long": False, "short": False,
+                "value": "Column unavailable", "description": "Entry timing — buy dips, not tops",
+                "signal_hint": "LONG: K<50 crossing up | SHORT: K>50 crossing down",
+                "strength": 0.0, "error": True}
+
+    stoch = stoch.dropna()
+    if len(stoch) < 2:
+        return {"rule": "Stochastic RSI (1H)", "long": False, "short": False,
+                "value": "Insufficient data", "description": "Entry timing — buy dips, not tops",
+                "signal_hint": "LONG: K<50 crossing up | SHORT: K>50 crossing down",
+                "strength": 0.0, "error": True}
+
+    k_cur  = float(stoch[k_col].iloc[-1])
+    d_cur  = float(stoch[d_col].iloc[-1])
+    k_prev = float(stoch[k_col].iloc[-2])
+    d_prev = float(stoch[d_col].iloc[-2])
+
+    # Crossover: K crosses up = K was <= D before, now K > D
+    crosses_up   = k_cur > d_cur and k_prev <= d_prev
+    crosses_down = k_cur < d_cur and k_prev >= d_prev
+
+    long_pass  = k_cur < 50 and crosses_up
+    short_pass = k_cur > 50 and crosses_down
+
+    if long_pass:
+        strength = min((50 - k_cur) / 50, 1.0)
+    elif short_pass:
+        strength = min((k_cur - 50) / 50, 1.0)
+    else:
+        strength = 0.0
+
+    return {
+        "rule": "Stochastic RSI (1H)",
+        "description": "Entry timing — buy dips, not tops",
+        "long": long_pass,
+        "short": short_pass,
+        "strength": round(float(strength), 3),
+        "value": f"K: {k_cur:.1f}  |  D: {d_cur:.1f}  |  K-prev: {k_prev:.1f}",
+        "signal_hint": "LONG: K<50 crossing up | SHORT: K>50 crossing down",
         "error": False,
     }
 
@@ -364,8 +471,9 @@ def get_chart_data(symbol: str, timeframe: str = "15m", limit: int = 100) -> dic
 
 def analyze(symbol: str) -> dict:
     """
-    Run all 5 rules for a given symbol.
-    Returns full analysis including signal decision and individual rule results.
+    Run all 6 rules for a given symbol.
+    Signal fires when 5/6 rules pass (one miss allowed).
+    Funding rate acts as a hard block on extreme values.
     """
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Analyzing {symbol}...")
 
@@ -375,10 +483,11 @@ def analyze(symbol: str) -> dict:
         check_rule_3_macd(symbol),
         check_rule_4_ema_stack(symbol),
         check_rule_5_volume(symbol),
+        check_rule_6_stoch_rsi(symbol),
     ]
 
-    # Rule weights: Rule1=2.0, Rule2=1.5, Rule3=1.5, Rule4=1.0, Rule5=1.0
-    RULE_WEIGHTS = [2.0, 1.5, 1.5, 1.0, 1.0]
+    # Rule weights: Rule1=2.0, Rule2=1.5, Rule3=1.5, Rule4=1.0, Rule5=1.0, Rule6=1.0
+    RULE_WEIGHTS = [2.0, 1.5, 1.5, 1.0, 1.0, 1.0]
     total_weight = sum(RULE_WEIGHTS)
 
     # Convert numpy types to native Python types for JSON serialization
@@ -396,18 +505,36 @@ def analyze(symbol: str) -> dict:
     short_count = int(sum(rules_short))
     total = len(rules)
 
-    all_long = all(rules_long)
-    all_short = all(rules_short)
-
-    if all_long:
+    # Signal threshold: 5/6 rules required (one miss allowed)
+    SIGNAL_THRESHOLD = 5
+    if long_count >= SIGNAL_THRESHOLD and long_count > short_count:
         signal = "BUY"
         signal_color = "green"
-    elif all_short:
+    elif short_count >= SIGNAL_THRESHOLD and short_count > long_count:
         signal = "SELL"
         signal_color = "red"
+    elif long_count >= SIGNAL_THRESHOLD and short_count >= SIGNAL_THRESHOLD:
+        # Tie — conflicting signals, wait
+        signal = "WAIT"
+        signal_color = "gray"
     else:
         signal = "WAIT"
         signal_color = "gray"
+
+    # Funding rate hard block
+    funding_info = fetch_funding_rate(symbol)
+    funding_rate = funding_info["rate"]
+    funding_blocked = funding_info["blocked_side"]
+    signal_blocked_reason = None
+
+    if funding_blocked == "LONG" and signal == "BUY":
+        signal = "WAIT"
+        signal_color = "gray"
+        signal_blocked_reason = "Extreme positive funding — long squeeze risk"
+    elif funding_blocked == "SHORT" and signal == "SELL":
+        signal = "WAIT"
+        signal_color = "gray"
+        signal_blocked_reason = "Extreme negative funding — short squeeze risk"
 
     # Weighted confidence score
     long_confidence = sum(
@@ -434,16 +561,16 @@ def analyze(symbol: str) -> dict:
         confidence_label = "Weak"
         confidence_color = "gray"
 
-    # Signal forming detection (3-4 rules passing = heads up)
+    # Forming detection: exactly 4/6 rules passing = heads up (5/6 = real signal)
     forming = False
     forming_direction = None
-    if not all_long and not all_short:
-        if 3 <= long_count <= 4:
+    if signal == "WAIT":
+        if long_count >= 4 or short_count >= 4:
             forming = True
-            forming_direction = "LONG"
-        elif 3 <= short_count <= 4:
-            forming = True
-            forming_direction = "SHORT"
+            if long_count >= short_count:
+                forming_direction = "LONG"
+            else:
+                forming_direction = "SHORT"
 
     # Get current price
     try:
@@ -465,6 +592,9 @@ def analyze(symbol: str) -> dict:
         "confidence_color": confidence_color,
         "forming": forming,
         "forming_direction": forming_direction,
+        "funding_rate": funding_rate,
+        "funding_blocked": funding_blocked,
+        "signal_blocked_reason": signal_blocked_reason,
         "current_price": current_price,
         "timestamp": datetime.now().isoformat(),
         "timestamp_display": datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC"),

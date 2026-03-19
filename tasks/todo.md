@@ -1,154 +1,132 @@
-# TODO — 2026-03-19 — Crypto Signal Dashboard v2 (ByBit Trading Suite)
+# TODO — 2026-03-19 — Signal Rule Upgrade (Option B)
 
 ## Goal
-Transform the 5-rule confluence dashboard into a complete ByBit futures trading assistant with confidence-scored signals, copy-paste trade setups, a built-in guide, and a trade journal — optimized for daily trading with minimal screen time.
+Upgrade the 5-rule confluence system to a 6-rule state-based system. Replace the two event-based rules (MACD Crossover, Volume Surge) with state-based equivalents that persist during trends. Add Stochastic RSI for entry timing and a ByBit Funding Rate hard block filter. Require 5/6 rules to fire a signal.
+
+## Context
+All Milestone 1-4 tasks from the original plan are complete. This plan addresses a new problem: the system never fires because Rules 3 and 5 are event-based and almost never coincide with the other 3 state-based rules in real market conditions.
 
 ## Plan
 
-### Milestone 1: Smarter Signals (Confidence Scoring + Real-Time Feel)
+### Wave 1 (parallel — backend, all in analyzer.py)
 
-#### Wave 0 (prerequisite — exchange switch)
-- [x] **0.1** Switch exchange from Binance to ByBit in `analyzer.py:14` (`ccxt.binance` → `ccxt.bybit`) — prices will match user's trading platform exactly
-- [x] **0.2** Update dashboard header text from "Live via Binance" to "Live via ByBit" in `app.py`
-- [x] **0.3** Update Framework Settings panel "Data Source" from "Binance (Free API)" to "ByBit (Free API)"
+- [x] **1.1** Replace `check_rule_3_macd()` logic — MACD Crossover → MACD Histogram State
+  - New logic: MACD histogram must be **positive AND growing** (increasing) over the last 3 consecutive candles
+  - LONG pass: histogram[-1] > 0 AND histogram[-1] > histogram[-2] > histogram[-3]
+  - SHORT pass: histogram[-1] < 0 AND histogram[-1] < histogram[-2] < histogram[-3]
+  - Strength: abs(histogram[-1]) normalized by current price * 0.001, capped at 1.0
+  - Update rule name to `"MACD Histogram (1H)"`, description to `"Momentum building in signal direction"`
+  - signal_hint: `"LONG: histogram positive & growing | SHORT: histogram negative & falling"`
 
-#### Wave 1 (parallel — backend, depends on Wave 0)
-- [x] **1.1** Add rule strength scoring to `analyzer.py` — each rule returns `strength: float` (0.0–1.0) based on distance from threshold, not just pass/fail
-  - Rule 1 (Trend): strength = abs(price - ema200) / (ema200 * 0.02), capped at 1.0
-  - Rule 2 (RSI): strength = distance from threshold midpoint (e.g., RSI 60 in 50-70 range = 0.5)
-  - Rule 3 (MACD): strength = 1.0 for fresh crossover (this candle), 0.66 for 1 candle ago, 0.33 for 2 candles ago
-  - Rule 4 (EMA Stack): strength = spread between Price/EMA9/EMA21 normalized
-  - Rule 5 (Volume): strength = (ratio - 1.0) / 1.0, capped at 1.0 (ratio 2.2 = 1.0, ratio 1.2 = 0.2)
-- [x] **1.2** Add weighted confidence score to `analyze()` return value
-  - Weights: Rule 1 = 2.0, Rules 2-3 = 1.5 each, Rules 4-5 = 1.0 each (total weight = 7.0)
-  - Formula: `confidence = sum(strength_i * weight_i) / sum(weight_i) * 100`
-  - Return: `confidence_score`, `confidence_label` (Strong/Medium/Weak), `confidence_color`
-  - Staging: >=85% Green/Strong, 70-84% Yellow/Medium, <70% Gray/Weak
-- [x] **1.3** Add "signal forming" detection — return `forming: true` + `forming_direction` when 3-4/5 rules pass (heads-up before full signal)
+- [x] **1.2** Replace `check_rule_5_volume()` logic — Volume Surge → OBV Trend
+  - New logic: On Balance Volume (OBV) must be sloping in the signal direction over last 5 candles
+  - Calculate OBV manually: `obv[i] = obv[i-1] + volume[i]` if close[i] > close[i-1] else `obv[i-1] - volume[i]`
+  - LONG pass: linear slope of OBV over last 5 candles is positive (OBV trending up = net buying)
+  - SHORT pass: linear slope of OBV over last 5 candles is negative (OBV trending down = net selling)
+  - Slope: `(obv[-1] - obv[-5]) / 5` — positive = buying pressure, negative = selling pressure
+  - Strength: abs(slope) normalized by average volume, capped at 1.0
+  - Update rule name to `"OBV Trend (15M)"`, description to `"Net buying/selling pressure over 5 candles"`
+  - signal_hint: `"LONG: OBV rising (net buyers) | SHORT: OBV falling (net sellers)"`
 
-#### Wave 2 (depends on 1.1–1.3 — frontend)
-- [x] **1.4** Update signal card UI to show confidence score, strength label, and color-coded confidence bar
-- [x] **1.5** Add per-rule strength bars in the rules panel (mini progress bar next to each rule showing 0-100% strength)
-- [x] **1.6** Add "Signal Forming" alert banner — yellow pulsing banner at top when 3-4 rules pass ("BTC/USDT: 4/5 rules passing for LONG — watch closely")
-- [x] **1.7** Add refresh mode toggle in header — "Real-Time" (10s) vs "Polling" (60s). Default to Polling. User switches to Real-Time when actively watching for entries. Saves to settings so it persists. Updates `CACHE_TTL` dynamically.
+- [x] **1.3** Add new `check_rule_6_stoch_rsi(symbol)` function
+  - Timeframe: 1H, fetch 60 candles
+  - Calculate RSI(14) first, then Stochastic of RSI: `stoch_k = (rsi - rsi_min_14) / (rsi_max_14 - rsi_min_14) * 100` over 14-period window, then smooth with 3-period SMA for K and D lines
+  - Use `pandas_ta.stochrsi(close, length=14, rsi_length=14, k=3, d=3)` — returns STOCHRSId and STOCHRSIk columns
+  - LONG pass: K < 50 AND K is crossing up over D (K[-1] > D[-1] AND K[-2] <= D[-2]) — oversold bounce in uptrend
+  - SHORT pass: K > 50 AND K is crossing down below D (K[-1] < D[-1] AND K[-2] >= D[-2]) — overbought pullback in downtrend
+  - Strength: for long — (50 - K) / 50 capped at 1.0 (lower K = stronger oversold bounce). For short — (K - 50) / 50 capped at 1.0
+  - Return dict with standard rule fields: rule, description, long, short, strength, value, signal_hint, error
 
----
+- [x] **1.4** Add `fetch_funding_rate(symbol)` helper function
+  - Call `exchange.fetch_funding_rate(symbol)` — returns ccxt funding rate dict
+  - Extract `fundingRate` field (float, e.g. 0.0001 = 0.01%)
+  - Handle exceptions: return None on failure (ccxt error, unsupported symbol)
+  - Thresholds: extreme_positive = 0.0005 (0.05%), extreme_negative = -0.0005
+  - Return dict: `{rate: float|None, extreme: bool, direction: "long"|"short"|None, blocked_side: "LONG"|"SHORT"|None}`
 
-### Milestone 2: Trade Setup Card + Copy-to-Clipboard + Guide
+### Wave 2 (depends on Wave 1 — update core analyze() function)
 
-#### Wave 3 (parallel — backend)
-- [x] **2.1** Add trade setup calculator to `analyzer.py` — new function `calculate_trade_setup(analysis, account_balance, risk_pct)` returning:
-  - `entry_price`: current market price
-  - `stop_loss`: recent swing low/high from 15M data (or 1.5% fallback)
-  - `tp1`, `tp2`, `tp3`: entry +/- 2%, 5%, 8% respectively
-  - `sl_pct`: percentage distance to stop loss
-  - `position_size`: `(account_balance * risk_pct) / sl_distance`
-  - `position_size_coin`: position in coin units
-  - `leverage`: min(max(2, round(1 / sl_pct)), 5) — auto-calculated 2x-5x based on SL distance
-  - `risk_reward`: array of R:R for each TP level
-- [x] **2.2** Add `/api/trade-setup` endpoint accepting `symbol`, `balance` (default 1000), `risk_pct` (default 0.02)
-- [x] **2.3** Add user settings persistence — `data/settings.json` storing: `account_balance`, `risk_pct`, `max_leverage`
+- [x] **2.1** Update `analyze()` in analyzer.py
+  - Add `check_rule_6_stoch_rsi(symbol)` to rules list (6 rules total)
+  - Update `RULE_WEIGHTS` to `[2.0, 1.5, 1.5, 1.0, 1.0, 1.0]`, total_weight = 8.0
+  - **Change signal threshold:** Replace `all(rules_long)` / `all(rules_short)` with `long_count >= 5` / `short_count >= 5` (5/6 minimum)
+  - Resolve conflict: if both long_count >= 5 and short_count >= 5, use whichever is higher; if tie, WAIT
+  - **Add funding rate check:** Call `fetch_funding_rate(symbol)`, add `funding_rate` and `funding_blocked` to return value
+  - If `funding_blocked == "LONG"` and signal would be BUY: override to WAIT, set `signal_blocked_reason = "Extreme positive funding — long squeeze risk"`
+  - If `funding_blocked == "SHORT"` and signal would be SELL: override to WAIT, set `signal_blocked_reason = "Extreme negative funding — short squeeze risk"`
+  - **Update forming detection:** forming = True when 4/6 or 5/6 rules pass (but not signal threshold)
+  - forming triggers at: `4 <= long_count <= 5` or `4 <= short_count <= 5`
+  - Add `funding_rate`, `funding_blocked`, `signal_blocked_reason` to return dict
+  - Update `total_rules` field from 5 to 6
 
-#### Wave 4 (depends on 2.1–2.3 — frontend)
-- [x] **2.4** Add Trade Setup Card below signal card showing: Entry, SL, TP1/TP2/TP3, Leverage, Position Size, Risk Amount, R:R ratios
-- [x] **2.5** Add "Copy Trade Setup" button — copies multi-line format to clipboard:
-  ```
-  === TRADE SETUP ===
-  Pair:       BTC/USDT
-  Direction:  LONG
-  Entry:      $67,250.00
-  Stop Loss:  $65,850.00 (-2.08%)
-  TP1:        $68,595.00 (+2.00%)
-  TP2:        $70,612.50 (+5.00%)
-  TP3:        $72,630.00 (+8.00%)
-  Leverage:   3x
-  Size:       0.015 BTC ($1,008.75)
-  Risk:       2% of balance
-  Confidence: 87% (Strong)
-  Signal:     2026-03-19 14:30 UTC
-  ===================
-  ```
-- [x] **2.6** Add Settings panel (right column) — input fields for: Account Balance (USDT), Risk % per trade, Max Leverage — auto-saved to backend
-- [x] **2.7** Add Trading Guide panel (collapsible, right column) — explains:
-  - How the 5-rule framework works
-  - What each confidence level means
-  - How to read the trade setup card
-  - Step-by-step: "How to place this trade on ByBit"
-  - Risk management basics (never risk >2%, always use SL)
-  - When to take profit (scale out at TP1/TP2/TP3)
+### Wave 3 (depends on Wave 2 — frontend updates in app.py DASHBOARD_HTML)
+
+- [x] **3.1** Update rules panel to show 6 rules
+  - Add row for Rule 6: Stochastic RSI with rule name, description, signal_hint, strength bar
+  - Find all instances of `"5/5"`, `"X/5"`, `"/5 rules"` in the JS/HTML and update to `"6"` and `"/6 rules"`
+  - Update "Signal Forming" banner text: was `"4/5 rules"` → `"5/6 rules"` (still 4 or 5 rules passing)
+
+- [x] **3.2** Add Funding Rate badge in signal card area
+  - Show current funding rate as a small badge below or beside the confidence score
+  - Format: `"Funding: +0.012%"` in green if neutral, yellow if approaching threshold (>0.03%), red + "BLOCKED" if extreme
+  - If `funding_blocked`: show a warning banner `"⚠ Long blocked — extreme funding rate (+0.05%)"` in red
+  - If funding data unavailable (None): show `"Funding: N/A"` in gray
+
+- [x] **3.3** Update trading guide to explain new rules
+  - Replace MACD Crossover explanation with MACD Histogram State explanation
+  - Replace Volume Surge explanation with OBV Trend explanation
+  - Add Stochastic RSI section: explain what it catches (oversold bounce = buy the dip, not the top)
+  - Add Funding Rate section: explain what it is and why extreme funding = danger
 
 ---
-
-### Milestone 3: Trade Journal + Performance Tracking
-
-#### Wave 5 (parallel — backend)
-- [x] **3.1** Create `data/trades.json` persistence layer — functions: `save_trade()`, `load_trades()`, `update_trade()`, `close_trade()`
-- [x] **3.2** Add trade data model:
-  ```
-  {id, symbol, direction, entry_price, stop_loss, tp1, tp2, tp3,
-   leverage, position_size, risk_pct, confidence_score,
-   status: "open"|"closed", exit_price, exit_reason,
-   pnl_usdt, pnl_pct, opened_at, closed_at, notes}
-  ```
-- [x] **3.3** Add API endpoints:
-  - `POST /api/trades` — log a new trade (from trade setup card or manual)
-  - `GET /api/trades` — list all trades (filterable: open/closed/all)
-  - `PUT /api/trades/<id>` — update trade (close it, add exit price/notes)
-  - `GET /api/trades/stats` — aggregate stats (win rate, avg R:R, total P&L, streak)
-
-#### Wave 6 (depends on 3.1–3.3 — frontend)
-- [x] **3.4** Add "Log This Trade" button on trade setup card — one click to save the current signal as an open trade
-- [x] **3.5** Add Trade Journal panel (new tab or section) showing:
-  - Open trades with live P&L (current price vs entry)
-  - Closed trades with final P&L
-  - Inline "Close Trade" button with exit price input
-- [x] **3.6** Add Performance Stats panel:
-  - Total trades, Win rate, Average R:R
-  - Total P&L (USDT and %)
-  - Best/worst trade
-  - Current streak (wins/losses)
-  - Simple equity curve (if enough data)
-- [x] **3.7** Migrate signal history from in-memory to `data/signals.json` so it survives restarts
-
----
-
-### Milestone 4: Polish + Final Touches
-
-#### Wave 7 (parallel — cleanup)
-- [x] **4.1** Add browser notification (Notification API) when a signal fires or is forming — user gets alerted even if tab is in background
-- [x] **4.2** Add audio alert (optional beep) on new signal
-- [x] **4.3** Create `data/` directory on startup if missing, add to `.gitignore`
-- [x] **4.4** Update README.md with new features documentation
-- [x] **4.5** Test full flow end-to-end: signal forms → alert → trade setup → copy → log trade → close trade → view stats
 
 ## Verification
-- `python app.py` → starts without errors on port 5001
-- `curl localhost:5001/api/analyze?symbol=BTC/USDT` → response includes `confidence_score`, `strength` per rule, `forming` field
-- `curl localhost:5001/api/trade-setup?symbol=BTC/USDT&balance=1000` → returns entry, SL, TP1-3, leverage, position size
-- `curl -X POST localhost:5001/api/trades -H 'Content-Type: application/json' -d '{...}'` → saves trade to data/trades.json
-- `curl localhost:5001/api/trades/stats` → returns win rate, P&L, R:R stats
-- Open browser → see confidence score, trade setup card, copy button works, guide panel visible
-- Click "Log This Trade" → trade appears in journal
-- Close trade → P&L calculated and displayed in stats
+
+```bash
+# Backend: rule functions work
+python -c "from analyzer import check_rule_3_macd; r=check_rule_3_macd('BTC/USDT'); print(r['rule'], r['long'], r['short'], r['strength'])"
+python -c "from analyzer import check_rule_5_volume; r=check_rule_5_volume('BTC/USDT'); print(r['rule'], r['long'], r['short'], r['strength'])"
+python -c "from analyzer import check_rule_6_stoch_rsi; r=check_rule_6_stoch_rsi('BTC/USDT'); print(r['rule'], r['long'], r['short'], r['strength'])"
+python -c "from analyzer import fetch_funding_rate; print(fetch_funding_rate('BTC/USDT'))"
+
+# Backend: full analyze() with 6 rules
+python -c "
+from analyzer import analyze
+r = analyze('BTC/USDT')
+print('Rules met (long):', r['long_rules_met'], '/', r['total_rules'])
+print('Signal:', r['signal'])
+print('Funding rate:', r['funding_rate'])
+print('Funding blocked:', r['funding_blocked'])
+print('Rule names:', [ru['rule'] for ru in r['rules']])
+"
+
+# Server: start without errors
+python app.py &
+sleep 3
+curl -s localhost:5001/api/analyze?symbol=BTC/USDT | python -m json.tool | grep -E "signal|total_rules|long_rules_met|funding"
+```
 
 ## Acceptance Criteria
-- [ ] Confidence scoring works — each rule has strength 0.0–1.0, aggregate weighted score shown
-- [ ] "Signal Forming" alert appears when 3-4/5 rules pass
-- [ ] Trade setup card shows entry, SL, TP1/TP2/TP3, leverage (2-5x), position size
-- [ ] Copy-to-clipboard produces multi-line format in one click
-- [ ] Settings panel stores account balance, risk %, max leverage (persisted)
-- [ ] Built-in trading guide explains the framework and ByBit placement steps
-- [ ] Trade journal logs/closes trades with P&L calculation
-- [ ] Performance stats show win rate, avg R:R, total P&L
-- [ ] Signal and trade data persists to disk (survives restart)
-- [ ] 10-second refresh cycle feels real-time
-- [ ] Browser notifications fire on new signal or signal forming
+
+- [ ] Rule 3 name is `"MACD Histogram (1H)"` — no longer "MACD Crossover"
+- [ ] Rule 5 name is `"OBV Trend (15M)"` — no longer "Volume Surge"
+- [ ] Rule 6 exists: `"Stochastic RSI (1H)"` with long/short/strength fields
+- [ ] `analyze()` returns `total_rules: 6`
+- [ ] Signal fires when `long_rules_met >= 5` or `short_rules_met >= 5`
+- [ ] Forming detected at 4 or 5 rules passing (not 3)
+- [ ] `funding_rate` and `funding_blocked` present in analyze() response
+- [ ] Extreme funding (>0.05%) blocks signal on correct side
+- [ ] Dashboard shows 6 rule rows in the rules panel
+- [ ] Funding rate badge visible in signal card
+- [ ] "X/6 rules" shown everywhere (was "X/5")
+- [ ] Running `python app.py` starts without errors
+- [ ] At least one coin shows 4/6 or 5/6 rules passing (forming state)
 
 ## Risks / Unknowns
-- ByBit rate limits at 10s polling across 6 symbols — mitigated by UI toggle (user chooses Real-Time 10s vs Polling 60s)
-- Swing high/low SL calculation may be unreliable on low-volume pairs (fallback to fixed 1.5%)
-- Browser Notification API requires user permission (graceful fallback if denied)
-- In-memory + JSON persistence is fine for single user but won't scale (acceptable for personal tool)
+
+- `exchange.fetch_funding_rate()` may not be supported for all symbols on ByBit's free API tier — handle gracefully (None = neutral, don't block)
+- `pandas_ta.stochrsi()` column naming may differ by version — check exact column names at runtime and handle both formats
+- Changing signal threshold from 5/5 to 5/6 means two directional signals could theoretically both reach 5/6 simultaneously — resolve by using whichever has more rules or WAIT on tie
 
 ## Results
 - (fill after execution)

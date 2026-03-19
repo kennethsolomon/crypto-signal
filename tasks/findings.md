@@ -1,5 +1,56 @@
 # Findings — 2026-03-19 — Crypto Signal Dashboard Improvements for ByBit
 
+---
+
+## Session 2 — 2026-03-19 — Signal Rule Upgrade (Option B)
+
+### Problem Statement
+The 5-rule confluence system never fires a full signal. User watched for hours and only ever saw 3/5. Root cause: Rules 3 (MACD Crossover) and 5 (Volume Surge) are EVENT-based (rare, point-in-time) while the other 3 rules are STATE-based (persistent). Requiring all 5 simultaneously with 2 event-based rules means signals occur maybe 1-2x per week — or never in quiet markets.
+
+### Diagnosis
+| Rule | Type | Problem |
+|---|---|---|
+| 1. EMA 200 Trend | State | Works fine |
+| 2. RSI Momentum | State | Works fine |
+| 3. MACD Crossover | **Event** | Requires crossover in last 3 candles — rare |
+| 4. EMA Stack | State | Works fine |
+| 5. Volume Surge | **Event** | Requires 1.2x spike on current candle — rare |
+
+### Chosen Approach: Option B — Patch + Stochastic RSI + Funding Rate Filter
+
+#### Changes to Existing Rules
+- **Rule 3 (MACD Crossover → MACD Histogram State):** Histogram must be positive AND growing over last 3 candles. State-based — true for extended periods during trends.
+- **Rule 5 (Volume Surge → OBV Trend):** On Balance Volume must be sloping in signal direction over 5 candles. Directional, persistent, not a single-candle spike.
+
+#### New Rules
+- **Rule 6 — Stochastic RSI (1H, 14,3,3):** For LONG: StochRSI < 50 and crossing up (oversold bounce in uptrend). For SHORT: > 50 crossing down (overbought pullback in downtrend). Best entry timing indicator — stops entering at the top of a move.
+- **Funding Rate Filter (ByBit-specific):** Hard block on extreme values. If funding > +0.05%: block longs (market overloaded with longs, squeeze risk). If funding < -0.05%: block shorts. Neutral funding = green light. Not a scored rule — an override filter.
+
+#### Signal Threshold
+- Requires **5/6 rules** (one miss allowed). This fires consistently while still filtering noise.
+
+#### Confidence Scoring Weights
+- Rule 1 (Trend EMA 200): 2.0
+- Rule 2 (RSI): 1.5
+- Rule 3 (MACD Histogram): 1.5
+- Rule 4 (EMA Stack): 1.0
+- Rule 5 (OBV Trend): 1.0
+- Rule 6 (Stochastic RSI): 1.0
+
+### Key Decisions
+| Decision | Rationale |
+|---|---|
+| State-based > Event-based rules | States persist for hours. Events last 1-3 candles. State rules fire consistently. |
+| OBV over raw volume | OBV is directional (tells you if volume is buying or selling). Raw volume is directionless. |
+| Stochastic RSI for entry timing | Stops entries at the top of a move. Catches dips within trends — better win rate. |
+| Funding rate as hard filter | ByBit-native alpha. Extreme funding predicts reversals. Too important to ignore, but too binary to weight. |
+| 5/6 not 6/6 | One miss allowed — real markets rarely align perfectly on all dimensions simultaneously. |
+
+### Open Questions
+- None
+
+---
+
 ## Problem Statement
 User trades futures on ByBit (beginner leverage) and wants a dashboard that:
 - Shows live market signals with alerts when a trade is forming

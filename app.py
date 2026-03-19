@@ -1396,7 +1396,7 @@ function buildDashboardHTML(data) {
             <div class="hist-price">${h.price ? "$" + Number(h.price).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:6}) : "—"}</div>
           </div>
         </div>`).join("")
-    : `<div class="no-signals">No signals fired yet.<br>Signals appear here when all 5 rules pass.</div>`;
+    : `<div class="no-signals">No signals fired yet.<br>Signals appear here when 5/6 rules pass.</div>`;
 
   const formingDisplay = data.forming ? "block" : "none";
   const formingText = data.forming
@@ -1434,11 +1434,12 @@ function buildDashboardHTML(data) {
           <div class="progress-bar-wrap">
             <div class="progress-bar-fill ${confFill}" id="live-confidence-bar" style="width:${confScore}%"></div>
           </div>
+          <div id="live-funding-badge" style="margin-top:6px;font-size:0.78rem;color:var(--muted)">Funding: —</div>
         </div>
 
         <!-- Rules Panel -->
         <div class="rules-panel">
-          <div class="rules-header">📋 Rule Checklist — All 5 must pass</div>
+          <div class="rules-header">📋 Rule Checklist — 5/6 must pass</div>
           ${rulesHtml}
         </div>
 
@@ -1490,7 +1491,7 @@ function buildDashboardHTML(data) {
           </div>
           <div class="framework-row">
             <div class="fw-label">Signal Logic</div>
-            <div class="fw-value">ALL 5 rules must pass</div>
+            <div class="fw-value">5/6 rules must pass</div>
           </div>
           <div class="framework-row">
             <div class="fw-label">Target Trades/Day</div>
@@ -1525,8 +1526,17 @@ function buildDashboardHTML(data) {
           </button>
           <div class="guide-content" id="guide-content">
             <div class="guide-section">
-              <div class="guide-section-title">How the 5-Rule Framework Works</div>
-              <p>The framework uses a confluence-based approach: a signal only fires when ALL 5 independent technical rules agree on direction. Each rule analyzes a different aspect of price action (trend, momentum, volume, structure, multi-timeframe alignment). This high bar filters out noise and produces fewer but higher-quality setups. The more rules that align strongly, the higher the confidence score.</p>
+              <div class="guide-section-title">How the 6-Rule Framework Works</div>
+              <p>The framework uses a confluence-based approach: a signal fires when 5 out of 6 independent technical rules agree on direction (one miss allowed). Each rule analyzes a different aspect of price action across multiple timeframes. The 6 rules are: Trend (4H EMA 200), RSI Momentum (1H), MACD Histogram (1H), EMA Stack (15M), OBV Trend (15M), and Stochastic RSI entry timing (1H). The more rules that align strongly, the higher the confidence score.</p>
+            </div>
+            <div class="guide-section">
+              <div class="guide-section-title">New Rules Explained</div>
+              <ul>
+                <li><strong>MACD Histogram (1H)</strong> — Replaces MACD Crossover. Instead of waiting for a rare crossover event, this rule checks that the MACD histogram is positive AND growing for 3 consecutive candles. This means momentum is actively building in the signal direction, not just starting.</li>
+                <li><strong>OBV Trend (15M)</strong> — Replaces Volume Surge. On Balance Volume measures whether volume is driven by buyers or sellers. A rising OBV slope = net buyers. A falling OBV slope = net sellers. More reliable than checking if a single candle had high volume.</li>
+                <li><strong>Stochastic RSI (1H)</strong> — New rule for entry timing. Prevents you from entering at the top of a move. For LONG: fires when StochRSI K line is below 50 (not overbought) and crosses up over D (oversold bounce in an uptrend). For SHORT: fires when K is above 50 and crosses down. This catches dips within trends.</li>
+                <li><strong>Funding Rate Filter</strong> — ByBit perpetuals charge a funding rate every 8 hours. When funding is extremely positive (≥ +0.05%), the market is overloaded with longs and a squeeze is likely — LONG signals are blocked. When extremely negative (≤ -0.05%), SHORT signals are blocked. This is free, exchange-native information that most traders ignore.</li>
+              </ul>
             </div>
             <div class="guide-section">
               <div class="guide-section-title">Signal Confidence Levels</div>
@@ -1721,6 +1731,30 @@ function updateDashboardValues(data) {
   if (confBar) {
     confBar.style.width = confScore + "%";
     confBar.className = "progress-bar-fill " + confFill;
+  }
+
+  // Update funding rate badge
+  const fundingEl = document.getElementById("live-funding-badge");
+  if (fundingEl) {
+    const fr = data.funding_rate;
+    const blocked = data.funding_blocked;
+    if (fr == null) {
+      fundingEl.textContent = "Funding: N/A";
+      fundingEl.style.color = "var(--muted)";
+    } else {
+      const frPct = (fr * 100).toFixed(4);
+      const frSign = fr >= 0 ? "+" : "";
+      if (blocked) {
+        fundingEl.innerHTML = `Funding: ${frSign}${frPct}% <span style="color:var(--red);font-weight:600">BLOCKED (${blocked})</span>`;
+        fundingEl.style.color = "var(--red)";
+      } else if (Math.abs(fr) >= 0.0003) {
+        fundingEl.textContent = `Funding: ${frSign}${frPct}% ⚠`;
+        fundingEl.style.color = "var(--yellow)";
+      } else {
+        fundingEl.textContent = `Funding: ${frSign}${frPct}%`;
+        fundingEl.style.color = "var(--muted)";
+      }
+    }
   }
 
   // Forming banner
